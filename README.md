@@ -32,6 +32,8 @@ Run `Rscript tests/check-app.R` from the same directory to render the documented
 
 ## Dashboard Tour
 
+Select **COVID-19 ↔ Card spending** in the left navigation to open the four tabs below. **COVID-19 comparison** and **Card spending comparison** currently show placeholders.
+
 | Tab | Question | Views |
 | :-- | :-- | :-- |
 | **Relationship** | Within each country, how did spending move with reported cases, deaths, or restrictions? | Linear and LOESS scatter fits, aligned series, 0–3 month lag profile, trend- and season-adjusted association, stringency bands, and descriptive ordinal and logistic spending outcomes. |

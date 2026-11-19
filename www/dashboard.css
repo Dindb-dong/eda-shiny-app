@@ -34,6 +34,19 @@ body {
 }
 .intro, .chart-note, .coverage { color: var(--quiet); }
 
+#section {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 1.2rem;
+  padding: .7rem;
+  margin-block-end: 1.6rem;
+}
+#section > li > a { color: var(--accent); font-weight: 650; border-radius: .7rem; }
+#section > li.active > a { color: white; background: var(--accent); }
+.section-navigation #tab { margin-block-end: 1.4rem; }
+.section-navigation .tab-pane[data-value="covid"] > .analysis-card,
+.section-navigation .tab-pane[data-value="cards"] > .analysis-card { margin-block-start: 0; }
+
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
