@@ -1,0 +1,83 @@
+:root {
+  --ink: #14282b;
+  --quiet: #48605e;
+  --accent: #175b53;
+  --wash: #f2f7f5;
+  --filter: #e5efeb;
+  --line: #d2e0dc;
+}
+
+body {
+  background: var(--wash);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1.5rem;
+}
+.dashboard {
+  max-inline-size: 1216px;
+  margin-inline: auto;
+  padding: clamp(1.6rem, 3vw, 4rem);
+}
+.masthead { margin-block-end: 2.2rem; }
+.course {
+  color: var(--accent);
+  font-size: 1.2rem;
+  font-weight: 750;
+  letter-spacing: .085em;
+  text-transform: uppercase;
+}
+.masthead h1 {
+  font-size: clamp(3.2rem, 2.2rem + 2.4vw, 4.8rem);
+  font-weight: 760;
+  letter-spacing: -.035em;
+  margin-block: .6rem 1rem;
+}
+.intro, .chart-note, .coverage { color: var(--quiet); }
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  align-items: end;
+  gap: 1.2rem;
+}
+.main-filters {
+  background: var(--filter);
+  border-radius: 1.2rem;
+  padding: 1.4rem;
+  margin-block-end: 1.8rem;
+}
+.view-filters, .covid-filters { margin-block: 1.2rem; }
+.view-filters { max-inline-size: 65rem; }
+.filter-grid .form-group { margin: 0; inline-size: 100%; min-inline-size: 0; }
+.filter-grid .control-label { color: var(--quiet); font-size: 1.3rem; }
+.filter-grid select { min-block-size: 4rem; border-color: #b8cbc5; border-radius: .7rem; color: var(--ink); }
+.filter-grid .checkbox { min-block-size: 3.2rem; margin: 0; }
+.nav-tabs { border-color: var(--line); display: flex; flex-wrap: wrap; }
+.nav-tabs > li > a { color: var(--accent); font-weight: 650; padding-inline: 1.2rem; }
+.nav-tabs > li.active > a { color: var(--ink); background: white; border-color: var(--line) var(--line) white; }
+
+.analysis-card {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 1.4rem;
+  margin-block: 1.6rem;
+  padding: clamp(1.3rem, 2vw, 2.4rem);
+}
+.analysis-card h2 { font-size: 2.2rem; font-weight: 720; margin-block: 0 .6rem; }
+.chart-note, .coverage { font-size: 1.3rem; }
+.chart-note { margin-block-end: 1.1rem; }
+.shiny-plot-output img { display: block; max-inline-size: 100%; block-size: auto; }
+.section-header { display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: .8rem; }
+.table-scroll { overflow: auto; }
+.table-scroll table { margin-block: .8rem; }
+.table-scroll th { text-align: start; }
+.methods { padding: .8rem 0 1.6rem; color: var(--quiet); }
+.methods summary { color: var(--accent); cursor: pointer; font-weight: 700; margin-block-end: .8rem; }
+.dashboard :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (max-width: 550px) {
+  .dashboard { padding-inline: .6rem; }
+  .filter-grid { grid-template-columns: minmax(0, 1fr); }
+  .nav-tabs > li > a { font-size: 1.25rem; padding-inline: .7rem; }
+  .analysis-card h2 { font-size: 1.9rem; }
+}
