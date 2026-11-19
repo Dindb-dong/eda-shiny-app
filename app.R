@@ -36,7 +36,7 @@ spending_choices <- c("Year-over-year growth" = "yoy", "2019 index" = "index",
                       "Month-over-month growth" = "monthly", "First + seasonal difference" = "double_diff")
 
 chart_notes <- c(
-  scatter = "Each point is one spending month. The dashed line is linear. The solid line is a local linear fit (LOESS).",
+  scatter = "Each point is one spending month. The dashed line is linear. The purple line is a local linear fit (LOESS).",
   aligned = "Both series are standardized within their own paired window. The horizontal axis follows the spending month.",
   lags = "Each point uses a separate calendar-month join. Counts fall at longer leads as the matched window gets shorter.",
   adjusted = "Calendar trend and one annual harmonic are removed from both axes before fitting a line.",
@@ -44,7 +44,7 @@ chart_notes <- c(
   outcomes = "Counts use year-over-year growth below −5%, between −5% and 5%, and above 5%. The 50-point stringency cutoff is fixed across panels.",
   binary = "Dots show whether spending fell from the same month last year. The logistic curve is fitted only when both outcomes have at least four observations and overlapping stringency ranges.",
   timeline = "The dotted line marks January 2020, the common period boundary.",
-  heatmap = "Color is centered on 100 for the spending index or zero for changes.",
+  heatmap = "Orange is below the reference and teal is above it. The reference is 100 for the spending index or zero for changes.",
   distribution = "The curves show the fraction of months at or below each value. Rugs show observed months.",
   projection = "The dashed line extends a pre-2020 log-linear trend with calendar-month effects. This view uses the 2019 spending index.",
   box = "Boxes summarize the median and central half of observed monthly values in each period.",

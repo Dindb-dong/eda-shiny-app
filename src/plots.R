@@ -1,9 +1,12 @@
 ink <- "#171717"
-dark_gray <- "#353535"
-mid_gray <- "#666666"
 quiet <- "#555555"
-year_colors <- c("2021" = dark_gray, "2022" = mid_gray)
-period_colors <- c("Before onset" = dark_gray, "Since onset" = mid_gray)
+blue <- "#2464bd"
+orange <- "#b95013"
+teal <- "#087d70"
+purple <- "#7441b4"
+neutral <- "#f7f5ee"
+year_colors <- c("2021" = blue, "2022" = orange)
+period_colors <- c("Before onset" = blue, "Since onset" = orange)
 
 chart_theme <- theme_minimal(base_size = 13) +
   theme(text = element_text(colour = ink), axis.text = element_text(colour = quiet),
@@ -32,7 +35,7 @@ relationship_plot <- function(paired, spending, covid, view, metric, measure, om
                                           rho = safe_correlation(g$x, g$value)))
     }))
     return(ggplot(points, aes(lead, rho)) + geom_hline(yintercept = 0, colour = quiet) +
-      geom_line(colour = dark_gray, linewidth = .8) + geom_point(colour = dark_gray, size = 2.5) +
+      geom_line(colour = blue, linewidth = .8) + geom_point(colour = blue, size = 2.5) +
       geom_text(aes(label = paste0("n=", n)), nudge_y = .13, size = 3, colour = quiet) +
       scale_x_continuous(breaks = 0:3) + coord_cartesian(ylim = c(-1.1, 1.2)) +
       labs(x = "Months by which COVID-19 leads spending", y = "Spearman correlation") +
@@ -47,7 +50,7 @@ relationship_plot <- function(paired, spending, covid, view, metric, measure, om
     })
     return(ggplot(standard, aes(date, z, colour = series, group = interaction(series, segment))) +
       geom_hline(yintercept = 0, colour = quiet) + geom_line(aes(linetype = series), linewidth = .8) + geom_point(aes(shape = series), size = 1.3) +
-      scale_colour_manual(values = c("COVID-19" = mid_gray, "Spending" = dark_gray)) +
+      scale_colour_manual(values = c("COVID-19" = orange, "Spending" = blue)) +
       scale_x_date(date_breaks = "6 months", date_labels = "%b %y") +
       labs(x = "Spending month", y = "Within-series z-score", colour = NULL, linetype = NULL, shape = NULL) + grid + chart_theme)
   }
@@ -66,8 +69,8 @@ relationship_plot <- function(paired, spending, covid, view, metric, measure, om
     labels <- unique(paired["panel"])
     labels <- subset(labels, !panel %in% curves$panel)
     p <- ggplot(paired, aes(stringency, decline)) +
-      geom_point(colour = mid_gray, alpha = .72, size = 2) +
-      geom_line(data = curves, aes(x, probability), colour = dark_gray, linewidth = .85) +
+      geom_point(colour = orange, alpha = .72, size = 2) +
+      geom_line(data = curves, aes(x, probability), colour = blue, linewidth = .85) +
       scale_y_continuous(breaks = c(0, .25, .5, .75, 1), labels = scales::label_percent()) +
       labs(x = "Restriction stringency (0–100)", y = "Observed outcome / fitted probability") + grid + chart_theme
     if (nrow(labels)) p <- p + geom_text(data = labels, aes(x = Inf, y = .5, label = "Sparse or separated outcomes"),
@@ -88,13 +91,13 @@ relationship_plot <- function(paired, spending, covid, view, metric, measure, om
       return(ggplot(counts, aes(band, Freq, fill = outcome)) +
         geom_col(position = "fill", width = .65) +
         geom_text(aes(label = Freq), position = position_fill(vjust = .5), colour = "white", size = 3.2) +
-        scale_fill_manual(values = c("Decline" = "#727272", "Near-flat" = "#4b4b4b", "Growth" = "#222222")) +
+        scale_fill_manual(values = c("Decline" = orange, "Near-flat" = purple, "Growth" = teal)) +
         scale_y_continuous(labels = scales::label_percent()) +
         labs(x = "Restriction stringency", y = "Share of months", fill = NULL) + grid + chart_theme)
     }
     return(ggplot(paired, aes(x, value, shape = band, colour = band)) +
       geom_point(size = 2.8, alpha = .88) +
-      scale_colour_manual(values = c("Below 50" = dark_gray, "50–100" = mid_gray)) +
+      scale_colour_manual(values = c("Below 50" = blue, "50–100" = orange)) +
       labs(x = x_label, y = y_label, colour = "Stringency band", shape = "Stringency band") +
       grid + chart_theme)
   }
@@ -103,7 +106,7 @@ relationship_plot <- function(paired, spending, covid, view, metric, measure, om
     geom_smooth(method = "lm", formula = y ~ x, se = FALSE, colour = quiet, linetype = 2, linewidth = .65)
   if (view == "scatter") {
     p <- p + geom_smooth(method = "loess", formula = y ~ x, span = 1, method.args = list(degree = 1),
-                         se = FALSE, colour = dark_gray, linewidth = .8)
+                         se = FALSE, colour = purple, linewidth = .8)
   }
   p + geom_point(aes(colour = year, shape = year), size = 2.8, alpha = .9) +
     scale_colour_manual(values = year_colors) +
@@ -135,7 +138,7 @@ spending_plot <- function(d, full, view, measure, columns) {
     center <- if (measure == "index") 100 else 0
     return(ggplot(d, aes(season, factor(format(date, "%Y")), fill = value)) + geom_tile() +
       scale_x_continuous(breaks = seq(1, 12, 2), labels = month.abb[seq(1, 12, 2)]) +
-      scale_fill_gradient2(low = "#eeeeee", mid = "#aaaaaa", high = "#222222",
+      scale_fill_gradient2(low = orange, mid = neutral, high = teal,
                            midpoint = center, limits = center + c(-limit, limit)) +
       labs(x = NULL, y = NULL, fill = y_label) + grid + chart_theme)
   }
@@ -146,22 +149,23 @@ spending_plot <- function(d, full, view, measure, columns) {
       geom_vline(xintercept = onset, linetype = 3, colour = quiet) +
       geom_line(aes(colour = "Observed"), linewidth = .8) +
       geom_line(aes(y = projected, colour = "Pre-COVID trend and seasonality"), linewidth = .8, linetype = 2) +
-      scale_colour_manual(values = c("Observed" = dark_gray, "Pre-COVID trend and seasonality" = mid_gray)) +
+      scale_colour_manual(values = c("Observed" = blue, "Pre-COVID trend and seasonality" = orange)) +
       calendar_axis() + labs(x = NULL, y = spending_measures[["index"]], colour = NULL) +
       grid + chart_theme)
   }
   reference <- if (measure == "index") 100 else 0
   ggplot(d, aes(date, value)) + geom_hline(yintercept = reference, colour = "#bdbdbd") +
-    geom_vline(xintercept = onset, linetype = 3, colour = quiet) + geom_line(colour = dark_gray, linewidth = .8) +
+    geom_vline(xintercept = onset, linetype = 3, colour = quiet) + geom_line(colour = blue, linewidth = .8) +
     calendar_axis() + labs(x = NULL, y = y_label) + grid + chart_theme
 }
 
 diagnostic_plot <- function(d, paired, view, measure, columns) {
   grid <- panel_grid(columns)
   if (view == "stl") {
-    return(ggplot(by_series(d, seasonal_decomposition), aes(date, value)) +
+    return(ggplot(by_series(d, seasonal_decomposition), aes(date, value, colour = component)) +
       geom_vline(xintercept = onset, linetype = 3, colour = quiet) +
-      geom_line(colour = dark_gray, linewidth = .7) + calendar_axis() +
+      geom_line(linewidth = .7) + calendar_axis() +
+      scale_colour_manual(values = c("Trend" = blue, "Seasonal" = teal, "Remainder" = purple), guide = "none") +
       facet_wrap(vars(component, panel), ncol = columns, scales = "free_y") +
       labs(x = NULL, y = "Log spending") + chart_theme)
   }
@@ -174,7 +178,8 @@ diagnostic_plot <- function(d, paired, view, measure, columns) {
       data.frame(panel = g$panel[1], lag = as.numeric(a$lag)[keep], value = as.numeric(a$acf)[keep])
     })
     return(ggplot(ac, aes(lag, value)) + geom_hline(yintercept = 0, colour = quiet) +
-      geom_col(fill = dark_gray, width = .62) + coord_cartesian(ylim = c(-1, 1)) +
+      geom_col(aes(fill = value >= 0), width = .62) +
+      scale_fill_manual(values = c("TRUE" = blue, "FALSE" = orange), guide = "none") + coord_cartesian(ylim = c(-1, 1)) +
       labs(x = "Lag (months)", y = if (view == "acf") "Autocorrelation" else "Partial autocorrelation") + grid + chart_theme)
   }
   if (view == "qq") {
@@ -189,17 +194,17 @@ diagnostic_plot <- function(d, paired, view, measure, columns) {
     points <- by_series(d, quantile_comparison)
     if (view == "quantiles") {
       return(ggplot(points, aes(before, since)) + geom_abline(linetype = 2, colour = quiet) +
-        geom_point(colour = dark_gray, size = 2) +
+        geom_point(colour = blue, size = 2) +
         labs(x = "Before-onset quantile", y = "Since-onset quantile") + grid + chart_theme)
     }
     return(ggplot(points, aes(average, difference)) + geom_hline(yintercept = 0, colour = quiet) +
-      geom_point(colour = dark_gray, size = 2) +
+      geom_point(colour = blue, size = 2) +
       labs(x = "Average of matching quantiles", y = "Since minus before") + grid + chart_theme)
   }
   if (view == "spread") {
     d$year <- format(d$date, "%Y")
     points <- by_series(d, location_spread)
-    return(ggplot(points, aes(median, iqr)) + geom_point(colour = dark_gray, size = 2) +
+    return(ggplot(points, aes(median, iqr)) + geom_point(colour = blue, size = 2) +
       geom_text(aes(label = year), vjust = -.7, size = 3, check_overlap = TRUE) +
       scale_y_continuous(expand = expansion(mult = c(.05, .15))) +
       labs(x = "Annual median", y = "Annual interquartile range") + grid + chart_theme)
@@ -207,7 +212,7 @@ diagnostic_plot <- function(d, paired, view, measure, columns) {
   if (view == "boxcox") {
     profile <- by_series(d, boxcox_profile)
     best <- subset(profile, likelihood == 0)
-    return(ggplot(profile, aes(lambda, likelihood)) + geom_line(colour = dark_gray, linewidth = .8) +
+    return(ggplot(profile, aes(lambda, likelihood)) + geom_line(colour = blue, linewidth = .8) +
       geom_vline(data = best, aes(xintercept = lambda), colour = quiet, linetype = 2) +
       labs(x = "Box–Cox power (zero = log)", y = "Relative profile log likelihood") +
       grid + chart_theme)
@@ -215,22 +220,22 @@ diagnostic_plot <- function(d, paired, view, measure, columns) {
   fitted <- by_series(paired, adjust_association)
   if (view == "fitted_resid") {
     return(ggplot(fitted, aes(fitted, residual)) + geom_hline(yintercept = 0, colour = quiet) +
-      geom_point(colour = dark_gray, size = 2.5) + labs(x = "Adjusted model fitted value", y = "Residual") +
+      geom_point(colour = blue, size = 2.5) + labs(x = "Adjusted model fitted value", y = "Residual") +
       grid + chart_theme)
   }
   if (view == "residuals") {
     return(ggplot(fitted, aes(date, residual)) + geom_hline(yintercept = 0, colour = quiet) +
-      geom_point(colour = dark_gray, size = 2.5) + scale_x_date(date_breaks = "6 months", date_labels = "%b %y") +
+      geom_point(colour = blue, size = 2.5) + scale_x_date(date_breaks = "6 months", date_labels = "%b %y") +
       labs(x = "Spending month", y = "Adjusted model residual") + grid + chart_theme)
   }
-  ggplot(fitted, aes(date, cook)) + geom_col(fill = mid_gray, width = 20) +
+  ggplot(fitted, aes(date, cook)) + geom_col(fill = purple, width = 20) +
     scale_x_date(date_breaks = "6 months", date_labels = "%b %y") +
     labs(x = "Spending month", y = "Cook’s distance") + grid + chart_theme
 }
 
 forecast_plot <- function(predictions, view, columns) {
   actual <- unique(predictions[c("panel", "date", "actual")])
-  inks <- c("Observed" = ink, "Seasonal naïve" = "#898989", "Holt–Winters" = dark_gray, "SARIMA" = mid_gray)
+  inks <- c("Observed" = ink, "Seasonal naïve" = orange, "Holt–Winters" = teal, "SARIMA" = purple)
   ggplot(predictions, aes(date, prediction, colour = model, linetype = model)) +
     geom_line(linewidth = .77) +
     geom_line(data = actual, aes(date, actual, colour = "Observed", linetype = "Observed"),
@@ -250,7 +255,7 @@ break_plot <- function(fitted, columns) {
     geom_line(aes(y = segmented, colour = "Fitted with break"), linewidth = .8) +
     geom_line(data = subset(fitted, date >= onset), aes(y = continued, colour = "Pre-break slope continued"),
               linetype = 2, linewidth = .8) +
-    scale_colour_manual(values = c("Observed" = quiet, "Fitted with break" = dark_gray, "Pre-break slope continued" = mid_gray)) +
+    scale_colour_manual(values = c("Observed" = quiet, "Fitted with break" = blue, "Pre-break slope continued" = orange)) +
     guides(colour = guide_legend(nrow = 2, byrow = TRUE)) +
     calendar_axis() + labs(x = NULL, y = spending_measures[["index"]], colour = NULL) +
     panel_grid(columns) + chart_theme
@@ -259,7 +264,7 @@ break_plot <- function(fitted, columns) {
 age_plot <- function(d, view) {
   if (view == "age_residual") {
     return(ggplot(d, aes(date, age, fill = residual)) + geom_tile() +
-      scale_fill_gradient2(low = "#eeeeee", mid = "#aaaaaa", high = "#222222", midpoint = 0,
+      scale_fill_gradient2(low = orange, mid = neutral, high = teal, midpoint = 0,
                            name = "Log difference (×100)") +
       scale_y_continuous(breaks = seq(22.5, 77.5, 10)) +
       scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
@@ -272,7 +277,7 @@ age_plot <- function(d, view) {
     values <- transform(d, series = "Observed", mean_ticket = observed)
   }
   ggplot(values, aes(date, age, fill = mean_ticket)) + geom_tile() +
-    scale_fill_gradient(low = "#eeeeee", high = "#222222", name = "TWD per transaction", labels = scales::label_comma()) +
+    scale_fill_viridis_c(name = "TWD per transaction", labels = scales::label_comma()) +
     scale_y_continuous(breaks = seq(22.5, 77.5, 10)) +
     scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
     facet_wrap(vars(series), ncol = 1) +
