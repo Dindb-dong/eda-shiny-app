@@ -1,8 +1,8 @@
 # COVID-19 and card spending
 
-The editable Oh My Canvas document is **EDA Shiny · COVID-19 and Card Spending**. Its desktop and mobile Section navigation boards define the selected sidebar section and the child tabs above the analysis filters. The Relationship boards define the filters and analysis card. The **Analysis card** main component and its screen instances map to the chart and summary sections in app.R.
+The Oh My Canvas document **EDA Shiny · COVID-19 and Card Spending** contains the current desktop and mobile **Research layout** boards.
 
-- Desktop target is 1216 CSS pixels with two chart columns when space permits. Mobile target is 390 CSS pixels with sections stacked above the child tabs, filters and facets. The summary table can scroll within its own focusable region.
-- The page uses a pale green background, white cards, teal controls, dark ink and subdued notes. Chart treatments pair year colors with point shapes and model colors with line types.
-- Use native labeled Shiny selects and tabs. Keep keyboard focus visible, expose chart alt text, and provide the summary and analysis rows outside the plotted image.
-- The browser implementation includes the real tab states, diagnostics, forecasts and source-aware controls. The analysis card appears as a placeholder in the design board.
+- The page uses a white background, near-black text, gray rules and no tinted surfaces. Georgia headings give the analysis a report-style hierarchy. Native controls and tab labels use the system sans-serif.
+- The current section uses a thin black rule at the left. The current subtab uses an underline. The menu stacks above the content on mobile, followed by headings, filters and charts in reading order.
+- Filters use four columns on wide screens, two at intermediate widths and one on narrow screens. Chart facets stack when the plot area is narrow. The data table can scroll within its own focusable region.
+- Charts use grayscale and distinguish years and model series with point shapes and line types. Preserve accessible labels, keyboard focus and the summary and CSV paths.

@@ -31,9 +31,12 @@ fixed_stringency <- c("outcomes", "binary")
 forecast_views <- c("forecast", "backtest")
 model_views <- c(forecast_views, "break_model")
 choices <- function(labels) setNames(names(labels), unname(labels))
+spending_choices <- c("Year-over-year growth" = "yoy", "2019 index" = "index",
+                      "12-month log difference" = "seasonal", "Pre-COVID spending gap" = "gap",
+                      "Month-over-month growth" = "monthly", "First + seasonal difference" = "double_diff")
 
 chart_notes <- c(
-  scatter = "Each point is one spending month. The dashed line is linear and the teal curve is a local linear fit (LOESS).",
+  scatter = "Each point is one spending month. The dashed line is linear. The solid line is a local linear fit (LOESS).",
   aligned = "Both series are standardized within their own paired window. The horizontal axis follows the spending month.",
   lags = "Each point uses a separate calendar-month join. Counts fall at longer leads as the matched window gets shorter.",
   adjusted = "Calendar trend and one annual harmonic are removed from both axes before fitting a line.",
@@ -64,6 +67,8 @@ chart_notes <- c(
   cook = "Cook’s distance flags months that can strongly influence the adjusted linear model."
 )
 
+uses_covid_options <- "input.tab === 'relationship' || (input.tab === 'diagnostics' && ['residuals','cook','fitted_resid'].includes(input.diagnostic_view))"
+
 relationship_ui <- tagList(
   tabsetPanel(id = "tab",
     tabPanel("Relationship", value = "relationship"),
@@ -77,41 +82,35 @@ relationship_ui <- tagList(
       selectInput("area", "Geography", c(choices(areas), "Capital and non-capital areas" = "both"), selectize = FALSE)),
     selectInput("category", "Card category", choices(categories), selectize = FALSE),
     conditionalPanel("input.tab !== 'age'",
-      selectInput("measure", "Spending measure", choices(spending_measures), selectize = FALSE))),
-  conditionalPanel("input.tab === 'relationship'",
-    tags$div(class = "filter-grid view-filters",
-      selectInput("relationship_view", "View", choices(relationship_views), selectize = FALSE))),
-  conditionalPanel("input.tab === 'spending'",
-    tags$div(class = "filter-grid view-filters",
-      selectInput("spending_view", "View", choices(spending_views), selectize = FALSE),
-      conditionalPanel("!['forecast','backtest','break_model'].includes(input.spending_view)",
-        selectInput("period", "Spending period", c("Both periods" = "all", "Before onset · 2014–2019" = "pre_covid",
-                  "Since onset · 2020–2022" = "since_covid_onset"), selectize = FALSE)))),
-  conditionalPanel("input.tab === 'diagnostics'",
-    tags$div(class = "filter-grid view-filters",
-      selectInput("diagnostic_view", "View", choices(diagnostic_views), selectize = FALSE))),
-  conditionalPanel("input.tab === 'age'",
-    tags$div(class = "filter-grid view-filters",
-      selectInput("age_view", "View", choices(age_views), selectize = FALSE))),
-  conditionalPanel(
-    "input.tab === 'relationship' || (input.tab === 'diagnostics' && ['residuals','cook','fitted_resid'].includes(input.diagnostic_view))",
-    tags$div(class = "filter-grid covid-filters",
-      conditionalPanel("input.tab !== 'relationship' || !['outcomes','binary'].includes(input.relationship_view)",
-        selectInput("metric", "COVID-19 measure", choices(covid_measures), selected = "stringency", selectize = FALSE)),
-      conditionalPanel("input.tab !== 'relationship' || input.relationship_view !== 'lags'",
-        selectInput("lead", "COVID-19 leads spending", c("Same month" = 0, "1 month" = 1, "2 months" = 2, "3 months" = 3),
-                    selectize = FALSE)),
-      checkboxInput("omit_feb", "Exclude Taiwan’s February 2021 spending", value = FALSE)),
-    tags$p(class = "coverage", "Paired window 2021–2022 · National COVID-19 measures are shared across regions of each country.")),
-  tags$section(class = "analysis-card", "aria-labelledby" = "chart-title",
+      selectInput("measure", "Spending measure", spending_choices, selectize = FALSE))),
+  tags$div(class = "filter-grid analysis-options",
+    conditionalPanel("input.tab === 'relationship'",
+      selectInput("relationship_view", "View", choices(relationship_views), selectize = FALSE)),
+    conditionalPanel("input.tab === 'spending'",
+      selectInput("spending_view", "View", choices(spending_views), selectize = FALSE)),
+    conditionalPanel("input.tab === 'spending' && !['forecast','backtest','break_model'].includes(input.spending_view)",
+      selectInput("period", "Spending period", c("Both periods" = "all", "Before onset · 2014–2019" = "pre_covid",
+                  "Since onset · 2020–2022" = "since_covid_onset"), selectize = FALSE)),
+    conditionalPanel("input.tab === 'diagnostics'",
+      selectInput("diagnostic_view", "View", choices(diagnostic_views), selectize = FALSE)),
+    conditionalPanel("input.tab === 'age'",
+      selectInput("age_view", "View", choices(age_views), selectize = FALSE)),
+    conditionalPanel(paste0("(", uses_covid_options, ") && (input.tab !== 'relationship' || !['outcomes','binary'].includes(input.relationship_view))"),
+      selectInput("metric", "COVID-19 measure", choices(covid_measures), selected = "stringency", selectize = FALSE)),
+    conditionalPanel(paste0("(", uses_covid_options, ") && (input.tab !== 'relationship' || input.relationship_view !== 'lags')"),
+      selectInput("lead", "COVID-19 leads spending", c("Same month" = 0, "1 month" = 1, "2 months" = 2, "3 months" = 3),
+                  selectize = FALSE)),
+    conditionalPanel(uses_covid_options, class = "sensitivity-option",
+      checkboxInput("omit_feb", "Exclude Taiwan’s February 2021 spending", value = FALSE))),
+  tags$section(class = "analysis-section", "aria-labelledby" = "chart-title",
     tags$h2(id = "chart-title", textOutput("title", inline = TRUE)),
     tags$p(class = "chart-note", textOutput("note", inline = TRUE)),
     plotOutput("chart", height = "auto"),
     tags$p(class = "coverage", textOutput("coverage", inline = TRUE))),
-  tags$section(class = "analysis-card", "aria-labelledby" = "summary-title",
+  tags$section(class = "analysis-section", "aria-labelledby" = "summary-title",
     tags$div(class = "section-header",
       tags$h2(id = "summary-title", "Summary by country and area"),
-      downloadButton("download", "Download analysis rows")),
+      downloadLink("download", "Download CSV")),
     tags$div(class = "table-scroll", tabindex = "0", role = "region", "aria-label" = "Scrollable summary table",
              tableOutput("summary")),
     conditionalPanel("input.tab === 'relationship'",
@@ -131,16 +130,15 @@ ui <- fluidPage(
     class = "dashboard",
     tags$header(class = "masthead",
       tags$p(class = "course", "STA3115 · Exploratory Data Analysis"),
-      tags$h1("COVID-19 and card spending"),
-      tags$p(class = "intro", "An exploratory analysis of Korea and Taiwan.")),
+      tags$h1("COVID-19 and card spending")),
     htmltools::tagAppendAttributes(
       navlistPanel(id = "section", selected = "joint", widths = c(3, 9), well = FALSE,
         tabPanel("COVID-19 comparison", value = "covid",
-          tags$section(class = "analysis-card",
+          tags$section(class = "analysis-section",
             tags$h2("COVID-19 comparison"),
             tags$p("This section is reserved for the comparison of Korea and Taiwan."))),
         tabPanel("Card spending comparison", value = "cards",
-          tags$section(class = "analysis-card",
+          tags$section(class = "analysis-section",
             tags$h2("Card spending comparison"),
             tags$p("This section is reserved for the comparison of Korea and Taiwan."))),
         tabPanel("COVID-19 ↔ Card spending", value = "joint", relationship_ui)
@@ -214,7 +212,7 @@ server <- function(input, output, session) {
     if (view == "forecast") return("Jan 2020 – Dec 2022 · Forecast gaps describe departures from the reference models.")
     if (uses_pairs()) {
       if (view == "lags") return("Summary and download below use the same-month pairs.")
-      return("The regional label applies to card spending. COVID-19 measures are national.")
+      return("Paired monthly data, 2021–2022. COVID-19 measures are national.")
     }
     d <- shown_spending()
     paste(format(min(d$date), "%b %Y"), "–", format(max(d$date), "%b %Y"), "· Monthly card spending")
