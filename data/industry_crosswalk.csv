@@ -1,0 +1,8 @@
+﻿category,label_ko,taiwan_code,korea_codes,status,exact_match,reason
+food,식료품·외식,FD,1300+2220,core_proxy,False,대만 食: 식품·식당·간식. 한국 식료품+음식점. 소매채널 분류와 세부 경계는 다를 수 있음.
+apparel,의류·신발·잡화,CT,1410+1420,core_proxy,False,대만 衣: 신발·가죽·의류. 한국 의복직물+복식잡화. 시계귀금속안경·화장품 제외. 세부 코드 완전일치 미확인.
+health_education_leisure,의료·교육·문화여가,EE,1700+2000+2100,sensitivity_only,False,범위가 넓은 근사. 대만 보건 포함. 한국 교육·오락문화·의료보건. 세부 범위 차이 미해결.
+retail_broad,종합소매(광의),DP,1100,sensitivity_only,False,대만 백화·슈퍼 등과 한국 종합소매 비교. 한국 편의점·면세점 포함 효과를 별도로 점검.
+retail_narrow,백화점·마트·슈퍼,DP,1110+1120+1130,alternative_not_additive,False,retail_broad의 대체 정의. 두 정의를 동시에 합산하면 중복. 대만 등(等)의 포괄범위 불명확.
+home,숙박·가구가전(불완전),LG,1600+2210,exclude_comparison,False,대만 住는 인테리어 포함. 한국에서 대응 인테리어를 분리할 수 없어 주분석 제외.
+mobility,자동차·항공(불완전),TR,1800+1920,exclude_comparison,False,대만 行의 교통 등 포괄범위 불명확. 한국 연료·대중교통을 넣을지 결정 불가. 주분석 제외.

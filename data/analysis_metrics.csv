@@ -1,0 +1,9 @@
+"metric","value"
+"food_yoy_paired_Pearson",0.110449601975966
+"food_yoy_paired_Spearman",0.213899613899614
+"seasonal_lm_residual_lag1_correlation",0.790579691830093
+"ordinary_loess_finite_grid",2880
+"modified_loess_finite_grid",2880
+"taiwan_food_closed_age_cells",576
+"ordinary_loess_residual_RMSE_log",0.111101906727746
+"modified_loess_residual_RMSE_log",0.129330234947733
