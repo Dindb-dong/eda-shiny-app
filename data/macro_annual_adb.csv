@@ -1,0 +1,29 @@
+DATAFLOW,FREQ,INDICATOR,ECONOMY_CODE,TIME_PERIOD,OBS_VALUE,UNIT,UNIT_MULT,DECIMALS,FOOTNOTE,OBS_STATUS,REF_YEAR,BASE_YEAR,DATA_SOURCE,METHODOLOGY
+ADB:DF_KIDB(1.0),A,LUR_PT,KOR,2021,3.7,PCT,0,1,,A,Calendar Year,,Ministry of Data and Statistics (MODS),
+ADB:DF_KIDB(1.0),A,LUR_PT,KOR,2022,2.9,PCT,0,1,,A,Calendar Year,,Ministry of Data and Statistics (MODS),
+ADB:DF_KIDB(1.0),A,LUR_PT,TAP,2021,4,PCT,0,1,,A,Calendar Year,,"Directorate-General of Budget, Accounting, and Statistics",
+ADB:DF_KIDB(1.0),A,LUR_PT,TAP,2022,3.7,PCT,0,1,,A,Calendar Year,,"Directorate-General of Budget, Accounting, and Statistics",
+ADB:DF_KIDB(1.0),A,NC_HFC_XDC_PS,KOR,2021,1004076.4,KRW,9,0,,A,Calendar Year,,Bank of Korea,
+ADB:DF_KIDB(1.0),A,NC_HFC_XDC_PS,KOR,2022,1093185.2,KRW,9,0,,A,Calendar Year,,Bank of Korea,
+ADB:DF_KIDB(1.0),A,NC_HFC_XDC_PS,TAP,2021,9659.086,TWD,9,0,,A,Calendar Year,,"Directorate-General of Budget, Accounting, and Statistics",
+ADB:DF_KIDB(1.0),A,NC_HFC_XDC_PS,TAP,2022,10296.111,TWD,9,0,,A,Calendar Year,,"Directorate-General of Budget, Accounting, and Statistics",
+ADB:DF_KIDB(1.0),A,NGDP_R_PTX_PS,KOR,2021,4.6,PCT,0,1,,A,,,Bank of Korea,
+ADB:DF_KIDB(1.0),A,NGDP_R_PTX_PS,KOR,2022,2.7,PCT,0,1,,A,,,Bank of Korea,
+ADB:DF_KIDB(1.0),A,NGDP_R_PTX_PS,TAP,2021,6.72,PCT,0,1,,A,,,"Directorate-General of Budget, Accounting, and Statistics",
+ADB:DF_KIDB(1.0),A,NGDP_R_PTX_PS,TAP,2022,2.68,PCT,0,1,,A,,,"Directorate-General of Budget, Accounting, and Statistics",
+ADB:DF_KIDB(1.0),A,NC_HFC_R_XDC_PS,KOR,2021,978584.3,KRW,9,0,,A,Calendar Year,2020,Bank of Korea,
+ADB:DF_KIDB(1.0),A,NC_HFC_R_XDC_PS,KOR,2022,1019415.7,KRW,9,0,,A,Calendar Year,2020,Bank of Korea,
+ADB:DF_KIDB(1.0),A,NC_HFC_R_XDC_PS,TAP,2021,9659.086,TWD,9,0,Data are expressed in chained NT dollars. Chain-linked data generally do not add up to the total.,A,Calendar Year,2021,"Directorate-General of Budget, Accounting, and Statistics",
+ADB:DF_KIDB(1.0),A,NC_HFC_R_XDC_PS,TAP,2022,10020.887,TWD,9,0,Data are expressed in chained NT dollars. Chain-linked data generally do not add up to the total.,A,Calendar Year,2021,"Directorate-General of Budget, Accounting, and Statistics",
+ADB:DF_KIDB(1.0),A,NC_HFC_PTX_PS,KOR,2021,3.8,PCT,0,1,,A,,,Bank of Korea,
+ADB:DF_KIDB(1.0),A,NC_HFC_PTX_PS,KOR,2022,4.2,PCT,0,1,,A,,,Bank of Korea,
+ADB:DF_KIDB(1.0),A,NC_HFC_PTX_PS,TAP,2021,-0.06,PCT,0,1,,A,,,"Directorate-General of Budget, Accounting, and Statistics",
+ADB:DF_KIDB(1.0),A,NC_HFC_PTX_PS,TAP,2022,4.02,PCT,0,1,,A,,,"Directorate-General of Budget, Accounting, and Statistics",
+ADB:DF_KIDB(1.0),A,PCPI_IX,KOR,2021,102.5,INDEX,0,1,,A,Average of period,2020,Ministry of Data and Statistics (MODS),Classification of Individual Consumption According to Purpose (COICOP) 1999
+ADB:DF_KIDB(1.0),A,PCPI_IX,KOR,2022,107.72,INDEX,0,1,,A,Average of period,2020,Ministry of Data and Statistics (MODS),Classification of Individual Consumption According to Purpose (COICOP) 1999
+ADB:DF_KIDB(1.0),A,PCPI_IX,TAP,2021,100,INDEX,0,1,,A,Average of period,2016,"Directorate-General of Budget, Accounting, and Statistics",Classification of Individual Consumption According to Purpose (COICOP) 1999
+ADB:DF_KIDB(1.0),A,PCPI_IX,TAP,2022,102.95,INDEX,0,1,,A,Average of period,2016,"Directorate-General of Budget, Accounting, and Statistics",Classification of Individual Consumption According to Purpose (COICOP) 1999
+ADB:DF_KIDB(1.0),A,PCPI_PC_PP_PT,KOR,2021,2.5,PCT,0,1,,A,,,Ministry of Data and Statistics (MODS),Classification of Individual Consumption According to Purpose (COICOP) 1999
+ADB:DF_KIDB(1.0),A,PCPI_PC_PP_PT,KOR,2022,5.082926829,PCT,0,1,,A,,,Ministry of Data and Statistics (MODS),Classification of Individual Consumption According to Purpose (COICOP) 1999
+ADB:DF_KIDB(1.0),A,PCPI_PC_PP_PT,TAP,2021,1.97,PCT,0,1,,A,,,"Directorate-General of Budget, Accounting, and Statistics",Classification of Individual Consumption According to Purpose (COICOP) 1999
+ADB:DF_KIDB(1.0),A,PCPI_PC_PP_PT,TAP,2022,2.95,PCT,0,1,,A,,,"Directorate-General of Budget, Accounting, and Statistics",Classification of Individual Consumption According to Purpose (COICOP) 1999
