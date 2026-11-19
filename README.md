@@ -80,6 +80,8 @@ The original `covid_daily.csv` also includes vaccination rates from [Our World i
 
 The regions describe where card spending is recorded. The COVID-19 extract still has country-level geographic resolution.
 
+The `covid_period` column uses a shared monthly cutoff for both countries. `pre_covid` covers January 2014 through December 2019, and `since_covid_onset` covers January 2020 through December 2022. The latter labels the period starting at the onset of the pandemic.
+
 ## Analysis Approach
 
 1. **Compare the pandemic and spending series at a common frequency.** For the joint analysis, sum daily reported cases and deaths by month, average the daily Stringency Index, and align the results with spending by country and calendar month.
