@@ -1,0 +1,137 @@
+:root {
+  color-scheme: light;
+  --ink: #171717;
+  --quiet: #555;
+  --line: #d9d9d9;
+  --control: #aaa;
+}
+
+body {
+  background: white;
+  color: var(--ink);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1.4rem;
+}
+.dashboard {
+  max-inline-size: 1240px;
+  margin-inline: auto;
+  padding: clamp(1.6rem, 3.3vw, 4rem);
+}
+.masthead {
+  border-block-end: 1px solid var(--line);
+  padding-block-end: 2rem;
+  margin-block-end: 2.2rem;
+}
+.course { color: var(--quiet); font-size: 1.25rem; margin-block-end: .7rem; }
+.masthead h1, .analysis-section h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 400;
+}
+.masthead h1 {
+  font-size: clamp(3.1rem, 2.6rem + 1.5vw, 4.5rem);
+  margin: 0;
+  letter-spacing: -.025em;
+}
+
+#section { border-inline-start: 1px solid var(--line); margin-block-end: 1.6rem; }
+#section > li > a {
+  background: transparent;
+  border-inline-start: 2px solid transparent;
+  border-radius: 0;
+  color: var(--quiet);
+  padding: .85rem 1rem;
+}
+#section > li.active > a {
+  border-inline-start-color: var(--ink);
+  color: var(--ink);
+  font-weight: 650;
+}
+#section > li > a:hover { color: var(--ink); text-decoration: underline; }
+
+#tab {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.8rem;
+  border-block-end: 1px solid var(--line);
+  margin-block-end: 1.55rem;
+}
+#tab > li > a {
+  margin: 0;
+  padding: .65rem 0 .85rem;
+  border: 0;
+  border-block-end: 2px solid transparent;
+  border-radius: 0;
+  color: var(--quiet);
+  background: transparent;
+}
+#tab > li.active > a { border-block-end-color: var(--ink); color: var(--ink); font-weight: 650; }
+#tab > li > a:hover { color: var(--ink); text-decoration: underline; }
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 1rem 1.2rem;
+}
+.main-filters { margin-block-end: 1.45rem; }
+.analysis-options { margin-block-end: 1.65rem; }
+.sensitivity-option { grid-column: 1 / -1; }
+.filter-grid .form-group { margin: 0; inline-size: 100%; min-inline-size: 0; }
+.filter-grid .control-label { color: var(--quiet); font-size: 1.2rem; font-weight: 550; }
+.filter-grid select {
+  min-block-size: 3.7rem;
+  border-color: var(--control);
+  border-radius: 2px;
+  color: var(--ink);
+  box-shadow: none;
+}
+.filter-grid select:focus { border-color: var(--ink); box-shadow: none; }
+
+.filter-grid .shiny-input-container > div:has(> select) { position: relative; }
+.filter-grid .shiny-input-container > div:has(> select)::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 1.3rem;
+  inline-size: .7rem;
+  block-size: .7rem;
+  border: solid var(--ink);
+  border-width: 0 1px 1px 0;
+  transform: translateY(-75%) rotate(45deg);
+  pointer-events: none;
+}
+.filter-grid .shiny-input-container > div:has(> select) > select {
+  appearance: none;
+  padding-inline-end: 3.2rem;
+}
+
+.filter-grid .checkbox { margin: 0; color: var(--quiet); font-size: 1.3rem; }
+.dashboard input[type="checkbox"] { accent-color: var(--ink); }
+
+.analysis-section { border-block-start: 1px solid var(--line); padding-block: 1.6rem; }
+.analysis-section h2 { font-size: 2.6rem; margin-block: 0 .6rem; }
+.chart-note, .coverage { color: var(--quiet); font-size: 1.3rem; }
+.chart-note { margin-block-end: .65rem; }
+.coverage { margin-block: .6rem 0; }
+.shiny-plot-output img { display: block; max-inline-size: 100%; block-size: auto; }
+.section-header { display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: .8rem; }
+#download { color: var(--ink); text-decoration: underline; }
+.table-scroll { overflow: auto; }
+.table-scroll table { margin-block: .8rem; font-variant-numeric: tabular-nums; }
+.table-scroll th { text-align: start; }
+.methods { border-block-start: 1px solid var(--line); padding-block: 1.25rem; color: var(--quiet); }
+.methods summary { color: var(--ink); cursor: pointer; font-weight: 650; margin-block-end: .8rem; }
+.dashboard :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+@media (min-width: 1120px) {
+  .main-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .analysis-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 550px) {
+  .dashboard { padding-inline: .6rem; }
+  .filter-grid { grid-template-columns: minmax(0, 1fr); }
+  #tab { gap: 0 1.2rem; }
+  #tab > li > a { font-size: 1.2rem; }
+  .analysis-section h2 { font-size: 2.3rem; }
+}
