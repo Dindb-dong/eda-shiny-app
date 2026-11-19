@@ -86,6 +86,25 @@ body {
   box-shadow: none;
 }
 .filter-grid select:focus { border-color: var(--ink); box-shadow: none; }
+
+.filter-grid .shiny-input-container > div:has(> select) { position: relative; }
+.filter-grid .shiny-input-container > div:has(> select)::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 1.3rem;
+  inline-size: .7rem;
+  block-size: .7rem;
+  border: solid var(--ink);
+  border-width: 0 1px 1px 0;
+  transform: translateY(-75%) rotate(45deg);
+  pointer-events: none;
+}
+.filter-grid .shiny-input-container > div:has(> select) > select {
+  appearance: none;
+  padding-inline-end: 3.2rem;
+}
+
 .filter-grid .checkbox { margin: 0; color: var(--quiet); font-size: 1.3rem; }
 .dashboard input[type="checkbox"] { accent-color: var(--ink); }
 
