@@ -32,7 +32,9 @@ Run `Rscript tests/check-app.R` from the same directory to render the documented
 
 ## Dashboard Tour
 
-Select **COVID-19 ↔ Card spending** in the left navigation to open the four tabs below. **COVID-19 comparison** and **Card spending comparison** currently show placeholders.
+Select **COVID-19 comparison** in the left navigation to compare daily cases, deaths, and restriction stringency in Korea and Taiwan. It shows 7-day averages per million residents above the daily Stringency Index, with optional policy-date markers, a same-day scatter against stringency, a summary by country, and a CSV download.
+
+Select **COVID-19 ↔ Card spending** to open the four tabs below. **Card spending comparison** currently shows a placeholder.
 
 | Tab | Question | Views |
 | :-- | :-- | :-- |

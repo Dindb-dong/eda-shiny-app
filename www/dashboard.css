@@ -86,6 +86,20 @@ body {
   box-shadow: none;
 }
 .filter-grid select:focus { border-color: var(--ink); box-shadow: none; }
+.filter-grid .input-daterange input {
+  min-block-size: 3.7rem;
+  padding-inline: .4rem;
+  border-color: var(--control);
+  border-radius: 2px;
+  color: var(--ink);
+  box-shadow: none;
+}
+.filter-grid .input-daterange input:focus { border-color: var(--ink); box-shadow: none; }
+.filter-grid .input-daterange .input-group-addon {
+  background: transparent;
+  border-color: var(--control);
+  color: var(--quiet);
+}
 
 .filter-grid .shiny-input-container > div:has(> select) { position: relative; }
 .filter-grid .shiny-input-container > div:has(> select)::after {
@@ -115,7 +129,7 @@ body {
 .coverage { margin-block: .6rem 0; }
 .shiny-plot-output img { display: block; max-inline-size: 100%; block-size: auto; }
 .section-header { display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: .8rem; }
-#download { color: var(--ink); text-decoration: underline; }
+#download, .download-link { color: var(--ink); text-decoration: underline; }
 .table-scroll { overflow: auto; }
 .table-scroll table { margin-block: .8rem; font-variant-numeric: tabular-nums; }
 .table-scroll th { text-align: start; }
