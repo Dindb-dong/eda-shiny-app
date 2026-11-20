@@ -69,4 +69,26 @@ testServer(server, {
   stopifnot(nrow(downloaded) == 22L, all(downloaded$covid_measure == "cases"),
             identical(downloaded$month, paired()$month))
 })
-cat(sprintf("All %d dashboard views rendered. Period, geography, leads, transforms, forecasts and CSV download verified.\n", length(view_names)))
+# COVID-19 comparison section (daily module).
+stopifnot(nrow(covid_daily) == 1460L, all(covid_daily$cases_pm >= 0, na.rm = TRUE),
+          all(covid_daily$cases_7day >= 0, na.rm = TRUE),
+          sum(is.na(covid_daily$cases_7day[covid_daily$date < as.Date("2021-01-07")])) == 12L)
+korea_daily <- subset(covid_daily, country == "Korea")
+day <- which(korea_daily$date == as.Date("2021-03-01"))
+stopifnot(isTRUE(all.equal(korea_daily$cases_7day[day], mean(korea_daily$cases_pm[(day - 6):day], na.rm = TRUE))))
+testServer(covid_section_server, args = list(data = covid_daily), {
+  session$setInputs(country = "both", view = "trend", metric = "cases", compressed = FALSE,
+                    events = TRUE, dates = as.Date(c("2021-01-01", "2022-12-31")))
+  stopifnot(nrow(selected()) == 1460L, nrow(events()) == 4L,
+            startsWith(output$chart$src, "data:image/png"),
+            grepl("<table", output$summary, fixed = TRUE), nzchar(output$title))
+  session$setInputs(view = "scatter", metric = "deaths", compressed = TRUE, country = "Taiwan",
+                    dates = as.Date(c("2022-01-01", "2022-06-30")))
+  stopifnot(nrow(selected()) == 181L, all(selected()$country == "Taiwan"),
+            startsWith(output$chart$src, "data:image/png"))
+  downloaded <- read.csv(output$download)
+  stopifnot(nrow(downloaded) == 181L, all(downloaded$country == "Taiwan"))
+  session$setInputs(view = "trend", events = FALSE, dates = as.Date(c("2021-05-01", "2021-06-15")))
+  stopifnot(nrow(events()) == 0L, startsWith(output$chart$src, "data:image/png"))
+})
+cat(sprintf("All %d dashboard views rendered. Period, geography, leads, transforms, forecasts, CSV downloads and the COVID-19 comparison section verified.\n", length(view_names)))
