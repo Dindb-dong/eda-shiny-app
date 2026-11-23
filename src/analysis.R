@@ -1,6 +1,5 @@
 countries <- c(KOR = "Korea", TWN = "Taiwan")
 areas <- c(national = "Nationwide", capital = "Capital area", non_capital = "Non-capital area")
-categories <- c(food = "Food and dining", apparel = "Apparel and accessories")
 spending_measures <- c(yoy = "Year-over-year growth (%)",
                        index = "Spending index (2019 mean = 100)",
                        seasonal = "12-month log difference (×100)",
@@ -12,7 +11,16 @@ covid_measures <- c(cases = "Reported cases", deaths = "Reported deaths",
 onset <- as.Date("2020-01-01")
 month_id <- function(date) as.integer(format(date, "%Y")) * 12L + as.integer(format(date, "%m"))
 
-read_spending <- function(path = "data") {
+read_industry_crosswalk <- function(path = "data") {
+  d <- read.csv(file.path(path, "industry_crosswalk.csv"), fileEncoding = "UTF-8-BOM",
+                colClasses = "character")
+  d <- subset(d, status != "alternative_not_additive")
+  stopifnot(!anyDuplicated(d$category), !anyDuplicated(d$taiwan_code),
+            all(nzchar(d$label_en)), all(nzchar(d$korea_codes)))
+  d
+}
+
+read_spending <- function(path = "data", industry = read_industry_crosswalk(path)) {
   read <- function(file) read.csv(file.path(path, file), fileEncoding = "UTF-8-BOM")
   before <- read("card_spending_by_capital_area_pre_covid_2014_2019.csv")
   since <- read("card_spending_by_capital_area_since_covid_onset_2020_2022.csv")
@@ -20,15 +28,28 @@ read_spending <- function(path = "data") {
   keys <- c("country", "month", "category", "capital_area")
   stopifnot(!anyDuplicated(spending[keys]),
             setequal(spending$country, unname(countries)),
-            setequal(spending$category, names(categories)),
+            setequal(spending$category, industry$category),
             setequal(spending$capital_area, c(names(areas)[-1], "unallocated")),
             all(is.finite(spending$amount_local) & spending$amount_local >= 0),
             all((spending$month < 202001) == (spending$covid_period == "pre_covid")),
             all(before$covid_period == "pre_covid"), all(since$covid_period == "since_covid_onset"))
   total_keys <- c("country", "month", "category", "currency")
   totals <- aggregate(spending["amount_local"], spending[total_keys], sum)
+  source_columns <- c("country", "month", "source_category", "currency", "amount_local")
+  national_source <- rbind(read("korea_national_2019_2022.csv")[source_columns],
+                           read("taiwan_national_2019_2022.csv")[source_columns])
+  korea_codes <- strsplit(industry$korea_codes, "+", fixed = TRUE)
+  source_map <- rbind(
+    data.frame(country = "Korea", category = rep(industry$category, lengths(korea_codes)),
+               source_category = unlist(korea_codes)),
+    data.frame(country = "Taiwan", category = industry$category,
+               source_category = industry$taiwan_code))
+  since_source <- merge(source_map, subset(national_source, month >= 202001),
+                        by = c("country", "source_category"))
+  stopifnot(!anyDuplicated(since_source[c("country", "category", "source_category", "month")]),
+            nrow(since_source) == 36L * nrow(source_map))
   national <- rbind(read("card_spending_pre_covid_2014_2019.csv")[c(total_keys, "amount_local")],
-                    subset(read("common_panel.csv"), month >= 202001)[c(total_keys, "amount_local")])
+                    aggregate(since_source["amount_local"], since_source[total_keys], sum))
   checked <- merge(totals, national, by = total_keys)
   stopifnot(!anyDuplicated(national[total_keys]), nrow(checked) == nrow(totals),
             nrow(checked) == nrow(national), all(checked$amount_local.x == checked$amount_local.y))
@@ -140,7 +161,12 @@ forecast_index <- function(g, cutoff) {
   log_spending <- ts(log(g$amount_local[train]), frequency = 12)
   horizon <- nrow(testing)
   seasonal_naive <- rep(tail(log_spending, 12), length.out = horizon)
-  smooth <- HoltWinters(log_spending, seasonal = "additive")
+  smooth <- tryCatch(
+    HoltWinters(log_spending, seasonal = "additive"),
+    # The default starting values fail for Taiwan's capital-area retail series.
+    error = function(e) HoltWinters(log_spending, seasonal = "additive",
+                                    optim.start = c(alpha = .4, beta = .2, gamma = .2))
+  )
   sarima <- arima(log_spending, order = c(0, 1, 1), seasonal = list(order = c(0, 1, 1), period = 12))
   if (sarima$code != 0L) stop("Seasonal ARIMA failed to converge for ", g$panel[1])
   forecasts <- list("Seasonal naïve" = seasonal_naive,
@@ -230,14 +256,14 @@ boxcox_profile <- function(g) {
   data.frame(panel = g$panel[1], lambda = lambda, likelihood = log_likelihood - max(log_likelihood))
 }
 
-read_age_profile <- function(path = "data") {
+read_age_profile <- function(path = "data", industry = read_industry_crosswalk(path)) {
   d <- read.csv(file.path(path, "taiwan_demographics_2019_2022.csv"), fileEncoding = "UTF-8-BOM")
-  d <- subset(d, dimension == "age" & source_category %in% c("FD", "CT") & is.finite(age_midpoint))
+  d <- subset(d, dimension == "age" & source_category %in% industry$taiwan_code & is.finite(age_midpoint))
   stopifnot(!anyDuplicated(d[c("month", "age_midpoint", "source_category")]),
             all(d$transactions > 0 & d$mean_ticket_local > 0),
             all(abs(d$mean_ticket_local - d$amount_local / d$transactions) < 1e-6))
   data.frame(date = as.Date(paste0(d$month, "01"), "%Y%m%d"),
-             category = ifelse(d$source_category == "FD", "food", "apparel"),
+             category = industry$category[match(d$source_category, industry$taiwan_code)],
              age = d$age_midpoint, age_band = d$age_band, transactions = d$transactions,
              observed = d$mean_ticket_local)
 }

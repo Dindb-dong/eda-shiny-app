@@ -73,7 +73,7 @@ relationship_plot <- function(paired, spending, covid, view, metric, measure, om
       geom_line(data = curves, aes(x, probability), colour = blue, linewidth = .85) +
       scale_y_continuous(breaks = c(0, .25, .5, .75, 1), labels = scales::label_percent()) +
       labs(x = "Restriction stringency (0–100)", y = "Observed outcome / fitted probability") + grid + chart_theme
-    if (nrow(labels)) p <- p + geom_text(data = labels, aes(x = Inf, y = .5, label = "Sparse or separated outcomes"),
+    if (nrow(labels)) p <- p + geom_text(data = labels, x = Inf, y = .5, label = "Sparse or separated outcomes",
                                        inherit.aes = FALSE, hjust = 1.06, size = 3, colour = quiet)
     return(p)
   }

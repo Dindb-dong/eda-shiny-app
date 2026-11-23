@@ -16,10 +16,12 @@ source("src/plots.R", local = TRUE)
 source("src/covid_section.R", local = TRUE)
 source("src/card_section.R", local = TRUE)
 
-spending <- read_spending()
+industry <- read_industry_crosswalk()
+categories <- setNames(industry$label_en, industry$category)
+spending <- read_spending(industry = industry)
 covid <- read_covid()
 covid_daily <- read_covid_daily()
-age_profile <- read_age_profile()
+age_profile <- read_age_profile(industry = industry)
 card_comparison <- read_card_comparison()
 
 relationship_views <- c(scatter = "Monthly scatter", aligned = "Aligned timeline",
@@ -134,6 +136,7 @@ relationship_ui <- tagList(
     tags$p("Cases and deaths are daily reports summed by month. Negative reporting adjustments are retained. Stringency is averaged by month. Count plots use an inverse hyperbolic sine scale, which retains zeros."),
     tags$p("The nationwide spending totals include unassigned amounts. Capital and non-capital series exclude them. Korea uses Seoul, Incheon, and Gyeonggi. Taiwan uses Taipei, New Taipei, and Keelung."),
     tags$p("Spending amounts are nominal and source coverage varies by country and category. The 2019 index uses each series’ own 2019 average. The same-month median uses 2014–2019. Growth and differences are calculated before filtering by period."),
+    tags$p("Industry categories use each source’s definitions. Lodging, vehicles and source-defined Other are best read within each country. National COVID-19 measures are shared by both spending areas."),
     tags$p("The joined series has at most 24 months per country and region. Shared trends, extreme months, and serial dependence can drive the fitted patterns. These charts describe associations."))
 )
 

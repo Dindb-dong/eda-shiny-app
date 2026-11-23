@@ -1,6 +1,8 @@
 source("app.R")
 
-stopifnot(nrow(spending) == 1296L, nrow(covid) == 48L)
+stopifnot(length(categories) == 7L, nrow(spending) == 4536L, nrow(covid) == 48L,
+          all(table(spending$country, spending$category, spending$capital_area) == 108L),
+          all(table(age_profile$category) == 576L))
 korea <- subset(spending, country == "Korea" & capital_area == "national" & category == "food")
 stopifnot(sum(is.na(korea$seasonal)) == 12L, sum(is.na(korea$monthly)) == 1L,
           isTRUE(all.equal(mean(korea$index[korea$month %/% 100 == 2019]), 100)))
@@ -78,6 +80,25 @@ testServer(server, {
   downloaded <- read.csv(output$download)
   stopifnot(nrow(downloaded) == 22L, all(downloaded$covid_measure == "cases"),
             identical(downloaded$month, paired()$month))
+  session$setInputs(country = "both", area = "both", metric = "stringency",
+                    lead = "0", omit_feb = FALSE, age_view = "age_observed")
+  session$setInputs(tab = "spending", spending_view = "forecast", category = "retail_broad",
+                    country = "Taiwan", area = "capital")
+  stopifnot(all(is.finite(predicted()$prediction)),
+            setequal(predicted()$model, c("Seasonal naïve", "Holt–Winters", "SARIMA")))
+  assert_chart()
+  session$setInputs(country = "both", area = "both")
+  for (category in setdiff(names(categories), c("food", "apparel"))) {
+    session$setInputs(tab = "relationship", category = category)
+    stopifnot(all(paired()$category == category), all(table(paired()$panel) == 24L),
+              length(unique(paired()$panel)) == 4L)
+    assert_chart()
+    downloaded <- read.csv(output$download)
+    stopifnot(nrow(downloaded) == 96L, all(downloaded$category == category))
+    session$setInputs(tab = "age")
+    stopifnot(nrow(age_data()) == 576L, all(age_data()$category == category))
+    assert_chart()
+  }
 })
 # COVID-19 comparison section (daily module).
 stopifnot(nrow(covid_daily) == 1460L, all(covid_daily$cases_pm >= 0, na.rm = TRUE),
@@ -123,4 +144,4 @@ testServer(covid_section_server, args = list(data = covid_daily), {
   session$setInputs(view = "trend", events = FALSE, dates = as.Date(c("2021-05-01", "2021-06-15")))
   stopifnot(nrow(events()) == 0L, startsWith(output$chart$src, "data:image/png"))
 })
-cat(sprintf("All %d dashboard views rendered. Period, geography, leads, transforms, forecasts, CSV downloads and the COVID-19 comparison section verified.\n", length(view_names)))
+cat(sprintf("All %d dashboard views rendered. All seven regional industries, geography, leads, transforms, forecasts, CSV downloads and the COVID-19 comparison section verified.\n", length(view_names)))
