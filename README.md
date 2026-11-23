@@ -38,10 +38,11 @@ The daily rates use fixed 2021 denominators: Korea's projected population of 51,
 
 Policy markers follow official announcements: [Taiwan's nationwide Level 3 alert, 19 May 2021](https://www.cdc.gov.tw/Category/ListContent/DORF6Hp-BCcnAc7p4PDSGQ?uaid=VN_6yeoBTKhRKoSy2d0hJQ), [Korea's gradual recovery phase, 1 November 2021](https://www.mohw.go.kr/gallery.es?act=view&bid=0003&list_no=368423&mid=a10605040000), [Korea's distancing relaxation, 18 April 2022](https://www.korea.net/Government/Briefing-Room/Press-Releases/view?articleId=371146&insttCode=A260111&type=N), and [Taiwan's end of arrival quarantine, 13 October 2022](https://www.cdc.gov.tw/En/Bulletin/Detail/nEBLnOPooDYFy_CBJqfWvg?typeid=158). They provide context rather than estimates of policy effects.
 
-Select **Card spending comparison** to open the nationwide comparison described below. Select **COVID-19 ↔ Card spending** to open the four tabs below.
+Select **Card spending comparison** to open the nationwide comparison described below. Select **COVID-19 ↔ Card spending** to open the five views below.
 
 | Tab | Question | Views |
 | :-- | :-- | :-- |
+| **Industry overview** | Which industries rose or fell, and where did capital and non-capital trends diverge? | Monthly heatmaps of year-over-year growth and the same-month capital minus non-capital gap in percentage points. All seven industries appear together. Select a period and country, then open an industry’s scatterplot or spending timeline. |
 | **Relationship** | Within each country, how did spending move with reported cases, deaths, or restrictions? | Linear and LOESS scatter fits, aligned series, 0–3 month lag profile, trend- and season-adjusted association, stringency bands, and descriptive ordinal and logistic spending outcomes. |
 | **Before and since onset** | How did spending change in the capital area and elsewhere? | Timeline, calendar heatmap, ECDF and boxplots, pre-COVID trend projection, three forecasting methods, and segmented regression with AR(1) errors. |
 | **Diagnostics** | Do seasonality, autocorrelation, distribution shape, or influential months change the interpretation? | Robust STL, ACF and PACF, normal and two-period Q–Q, quantile mean–difference, location–spread, Box–Cox, residuals, and Cook’s distance. |

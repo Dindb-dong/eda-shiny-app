@@ -21,6 +21,32 @@ stopifnot(isTRUE(all.equal(parts$value[parts$component == "Trend"],
                           as.numeric(expected_parts[, "seasonal"]))),
           isTRUE(all.equal(rowSums(matrix(parts$value, ncol = 3)), log(korea$amount_local))))
 
+# The overview exports the values represented by each heatmap tile.
+testServer(server, {
+  session$setInputs(tab = "overview", country = "both", overview_view = "industry_growth",
+                    overview_period = "since_covid_onset")
+  growth <- overview_data()
+  stopifnot(nrow(growth) == 4L * 7L * 36L, all(growth$month >= 202001),
+            length(unique(growth$panel)) == 4L, startsWith(output$chart$src, "data:image/png"),
+            grepl("Median", output$summary, fixed = TRUE))
+  csv <- read.csv(output$download)
+  stopifnot(nrow(csv) == nrow(growth), isTRUE(all.equal(csv$yoy_pct, growth$value)))
+  session$setInputs(country = "Taiwan", overview_view = "industry_gap", overview_period = "pre_covid")
+  gap <- overview_data()
+  capital <- subset(spending, country == "Taiwan" & capital_area == "capital")
+  other <- subset(spending, country == "Taiwan" & capital_area == "non_capital")
+  keys <- paste(gap$month, gap$category)
+  expected <- capital$yoy[match(keys, paste(capital$month, capital$category))] -
+    other$yoy[match(keys, paste(other$month, other$category))]
+  stopifnot(nrow(gap) == 7L * 60L, min(gap$month) == 201501L, max(gap$month) == 201912L,
+            all(gap$country == "Taiwan"), identical(gap$value, expected),
+            startsWith(output$chart$src, "data:image/png"),
+            grepl("percentage points", output$summary, fixed = TRUE))
+  csv <- read.csv(output$download)
+  stopifnot(isTRUE(all.equal(csv$gap_pp, gap$value)),
+            isTRUE(all.equal(csv$gap_pp, csv$capital_yoy_pct - csv$non_capital_yoy_pct)))
+})
+
 # Render every dashboard view through the real Shiny server.
 testServer(server, {
   session$setInputs(tab = "relationship", country = "both", area = "both", category = "food",

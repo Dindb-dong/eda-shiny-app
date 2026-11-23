@@ -82,6 +82,28 @@ read_spending <- function(path = "data", industry = read_industry_crosswalk(path
   }, keys = c("country", "category", "capital_area"))
 }
 
+industry_months <- function(spending, selected_countries, period, view) {
+  d <- spending[spending$country %in% selected_countries &
+                  spending$capital_area %in% c("capital", "non_capital") &
+                  spending$month >= 201501, ]
+  if (period != "all") d <- d[d$covid_period == period, ]
+  keys <- c("country", "category", "month", "date")
+  if (view == "industry_growth") {
+    d <- d[c(keys, "capital_area", "panel", "yoy")]
+    names(d)[names(d) == "yoy"] <- "value"
+    return(d)
+  }
+
+  capital <- d[d$capital_area == "capital", c(keys, "yoy")]
+  non_capital <- d[d$capital_area == "non_capital", c(keys, "yoy")]
+  names(capital)[names(capital) == "yoy"] <- "capital_yoy_pct"
+  names(non_capital)[names(non_capital) == "yoy"] <- "non_capital_yoy_pct"
+  matched <- merge(capital, non_capital, by = keys, all = TRUE)
+  matched$panel <- matched$country
+  matched$value <- matched$capital_yoy_pct - matched$non_capital_yoy_pct
+  matched
+}
+
 read_covid <- function(path = "data") {
   d <- read.csv(file.path(path, "covid_daily.csv"), fileEncoding = "UTF-8-BOM")
   d$date <- as.Date(d$date)
