@@ -4,9 +4,8 @@
 
 <p><strong>Two economies. Three lenses. One question about how spending changed.</strong></p>
 
-<img alt="Planned stack: R and Shiny" src="https://img.shields.io/badge/R-Shiny-276DC3?style=flat-square">
+<img alt="Stack: R and Shiny" src="https://img.shields.io/badge/R-Shiny-276DC3?style=flat-square">
 <img alt="Course: STA3115.01-00" src="https://img.shields.io/badge/STA3115.01--00-Final%20Project-0F766E?style=flat-square">
-<img alt="Status: Dashboard planned" src="https://img.shields.io/badge/Status-Dashboard%20Planned-64748B?style=flat-square">
 
 <p><strong>EXPLORATORY DATA ANALYSIS (STA3115.01-00)</strong></p>
 
@@ -18,19 +17,39 @@
 
 > How are COVID-19 cases, deaths, and government restriction stringency associated with changes in credit card spending in South Korea and Taiwan during 2021–2022?
 
-The planned R Shiny dashboard lets readers follow the pandemic timeline, compare spending within each country's card series, and then examine where the two patterns move together or diverge.
+The R Shiny dashboard joins each country's card spending to its own COVID-19 series. It uses national COVID-19 measures for each selected card-spending area.
+
+## Run locally
+
+Run from the repository root with R installed.
+
+```r
+install.packages(c("shiny", "ggplot2"))
+shiny::runApp()
+```
+
+Run `Rscript tests/check-app.R` from the same directory to render the documented dashboard views and check the monthly joins, date cutoffs, forecast inputs, and CSV download.
 
 ## Dashboard Tour
 
-| Tab | Question | Planned panels |
+Select **COVID-19 ↔ Card spending** in the left navigation to open the four tabs below. **COVID-19 comparison** and **Card spending comparison** currently show placeholders.
+
+| Tab | Question | Views |
 | :-- | :-- | :-- |
-| **01 · COVID-19 Timeline** | When did reported cases, deaths, and restrictions rise or fall in each country? | Daily and monthly timelines, distribution comparisons, and summaries of typical values and extremes. |
-| **02 · Card Spending** | Which categories changed most, and did the two countries move in the same direction? | Indexed spending trends, year-over-year growth, seasonal heatmaps, distribution diagnostics, and Taiwan's age-by-month spending patterns. |
-| **03 · COVID-19 × Spending** | Did spending move with cases, deaths, or restrictions, and did the pattern differ by country? | Aligned timelines, scatterplots and smoothers, conditional views, model diagnostics, and a synthesis of which patterns hold under alternative comparisons. |
+| **Relationship** | Within each country, how did spending move with reported cases, deaths, or restrictions? | Linear and LOESS scatter fits, aligned series, 0–3 month lag profile, trend- and season-adjusted association, stringency bands, and descriptive ordinal and logistic spending outcomes. |
+| **Before and since onset** | How did spending change in the capital area and elsewhere? | Timeline, calendar heatmap, ECDF and boxplots, pre-COVID trend projection, three forecasting methods, and segmented regression with AR(1) errors. |
+| **Diagnostics** | Do seasonality, autocorrelation, distribution shape, or influential months change the interpretation? | Robust STL, ACF and PACF, normal and two-period Q–Q, quantile mean–difference, location–spread, Box–Cox, residuals, and Cook’s distance. |
+| **Taiwan age profile** | How did the typical transaction amount vary by age and month? | Observed, ordinary and robust bivariate LOESS, and residual surfaces evaluated within the observed age-month grid. |
+
+The spending filters use the 2019 index, year-over-year and month-over-month growth, a gap from the 2014–2019 calendar-month median, a 12-month log difference, or a combined first and 12-month log difference. Each transformation is computed before applying any period filter.
+
+**Date coverage.** The card-only views use Jan 2014–Dec 2022, with Jan 2020 as the common cutoff. The relationship views can pair only Jan 2021–Dec 2022. A positive lead means the COVID-19 measure is from an earlier calendar month than the spending observation. No COVID-19 values are filled in for earlier years.
+
+**Forecast and break models.** The fixed 2019 holdout trains through 2018 and compares seasonal naïve, additive Holt–Winters on log spending, and log-scale SARIMA (0,1,1)(0,1,1)[12] using MAE and RMSE in index points. A separate 2020–2022 projection refits through 2019. The segmented model estimates the January 2020 level break and change in monthly log slope with calendar-month effects and AR(1) errors. Both serve as descriptive historical references. Concurrent shocks and coverage changes can affect the apparent break.
 
 ## Course Methods
 
-This provisional plot plan follows the STA3115 lecture slides and R exercises for Units 1–16.
+The original STA3115 course map below records candidate extensions and their interpretation. See the dashboard tour for the methods available in the app.
 
 | Course topic | Planned plot or analysis | What to look for |
 | :-- | :-- | :-- |
@@ -87,7 +106,7 @@ Both regional files include `covid_period` and use January 2020 as the cutoff fo
 
 1. **Compare the pandemic and spending series at a common frequency.** For the joint analysis, sum daily reported cases and deaths by month, average the daily Stringency Index, and align the results with spending by country and calendar month.
 2. **Compare relative spending changes.** Use each country and category's own 2019 average as the index baseline and use earlier card data to calculate year-over-year growth. Treat food and apparel as approximate matches because card coverage and category definitions differ.
-3. **Check how much the interpretation depends on the comparison.** Compare patterns with cases, deaths, and stringency within each country. Show how the association changes with the spending measure, a one-month lag, or the exclusion of months affected by unusual shifts such as Taiwan's February 2021 changes.
+3. **Check how much the interpretation depends on the comparison.** Compare patterns with cases, deaths, and stringency within each country. Show how the association changes with the spending measure, 0–3 month leads, or the exclusion of months affected by unusual shifts such as Taiwan's February 2021 changes.
 
 The joint window covers up to 24 months per country. Seasonality, shared trends, and differences in card coverage can all shape the apparent relationships. The synthesis will describe exploratory associations with those limits in view.
 
@@ -95,6 +114,5 @@ The joint window covers up to 24 months per country. Seasonality, shared trends,
 
 - [x] Define the research question and identify the source datasets
 - [x] Map the course methods to candidate plots and diagnostics
-- [ ] Build and validate the monthly analysis panel
-- [ ] Implement the three Shiny tabs
-- [ ] Add screenshots and local run instructions once the dashboard is runnable
+- [x] Build and validate the monthly analysis panel
+- [x] Implement the Shiny views and add local run instructions
