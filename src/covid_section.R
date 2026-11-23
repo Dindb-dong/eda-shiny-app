@@ -4,8 +4,8 @@
 # Depends on `countries` (src/analysis.R) and the colours and
 # `chart_theme` defined in src/plots.R, so source it after both.
 
-# 2021 population estimates used for the per-million rates.
-# Check both figures against one consistent source before publishing.
+# Fixed 2021 denominators: Korea's projected population and Taiwan's year-end
+# registered population. These national definitions differ; see README sources.
 covid_population <- c(Korea = 51744876, Taiwan = 23375314)
 
 covid_daily_measures <- c(cases = "New cases per million (7-day average)",
@@ -26,7 +26,7 @@ covid_country_colors <- c(Korea = blue, Taiwan = orange)
 covid_country_lines <- c(Korea = "solid", Taiwan = "22")
 covid_country_shapes <- c(Korea = 16, Taiwan = 17)
 
-# Policy dates shown for context. Verify against official announcements.
+# Policy dates shown for context; official announcement links are in README.md.
 covid_events <- data.frame(
   date = as.Date(c("2021-05-19", "2021-11-01", "2022-04-18", "2022-10-13")),
   country = c("Taiwan", "Korea", "Korea", "Taiwan"),
@@ -42,7 +42,7 @@ trailing_mean <- function(x, dates, days = 7L) {
   out <- vapply(seq_along(full), function(i) {
     if (i < days) return(NA_real_)
     w <- v[(i - days + 1L):i]
-    if (all(is.na(w))) NA_real_ else mean(w, na.rm = TRUE)
+    if (any(!is.finite(w))) NA_real_ else mean(w)
   }, numeric(1))
   out[match(dates, full)]
 }
@@ -55,9 +55,8 @@ read_covid_daily <- function(path = "data") {
   d$country <- unname(countries[d$country_code])
   d <- d[order(d$country, d$date), ]
   population <- unname(covid_population[d$country])
-  # Negative daily counts are reporting corrections. They are set aside here
-  # so a single correction cannot pull a 7-day average below zero.
-  per_million <- function(x) ifelse(x < 0, NA_real_, x) / population * 1e6
+  # Retain reporting corrections, consistently with the monthly joint analysis.
+  per_million <- function(x) x / population * 1e6
   d$cases_pm <- per_million(d$jhu_new_confirmed)
   d$deaths_pm <- per_million(d$jhu_new_deaths)
   d$stringency <- d$owid_stringency_index
@@ -79,6 +78,7 @@ covid_value_scale <- function(metric, compressed) {
                                       drop0trailing = TRUE)
   if (!compressed) return(scale_y_continuous(labels = number_labels))
   breaks <- if (metric == "deaths") c(0, .1, 1, 10) else c(0, 1, 10, 100, 1000, 10000)
+  breaks <- sort(unique(c(-breaks, breaks)))
   scale_y_continuous(breaks = asinh(breaks), labels = number_labels(breaks))
 }
 
@@ -165,8 +165,8 @@ covid_scatter_plot <- function(d, metric, compressed) {
   d$y <- if (compressed) asinh(value) else value
   d <- d[is.finite(d$y) & is.finite(d$stringency), , drop = FALSE]
   # LOESS needs enough distinct points; skip the fit for very short ranges.
-  enough <- names(which(tapply(d$stringency, d$country, function(x) length(unique(x))) >= 5 &
-                          table(d$country) >= 20))
+  enough <- names(Filter(function(g) nrow(g) >= 20 && length(unique(g$stringency)) >= 5,
+                         split(d, d$country)))
   ggplot(d, aes(stringency, y, colour = country, shape = country)) +
     geom_point(size = 1.6, alpha = .45) +
     geom_smooth(data = d[d$country %in% enough, , drop = FALSE], aes(linetype = country),
@@ -181,14 +181,15 @@ covid_scatter_plot <- function(d, metric, compressed) {
 
 covid_summary <- function(d) {
   finite_or_na <- function(x) if (is.finite(x)) x else NA_real_
+  complete_total <- function(x) if (any(!is.finite(x))) NA_real_ else sum(x)
   do.call(rbind, lapply(split(d, d$country), function(g) {
     peak <- which.max(g$cases_7day)
     data.frame(
       Country = g$country[1], Days = nrow(g),
       "Peak cases per million (7-day avg)" = if (length(peak)) g$cases_7day[peak] else NA_real_,
       "Peak date" = if (length(peak)) format(g$date[peak], "%d %b %Y") else NA_character_,
-      "Cases per million (total)" = sum(g$cases_pm, na.rm = TRUE),
-      "Deaths per million (total)" = sum(g$deaths_pm, na.rm = TRUE),
+      "Cases per million (total)" = complete_total(g$cases_pm),
+      "Deaths per million (total)" = complete_total(g$deaths_pm),
       "Mean stringency" = finite_or_na(mean(g$stringency, na.rm = TRUE)),
       "Days with stringency ≥ 50" = sum(g$stringency >= 50, na.rm = TRUE),
       check.names = FALSE)
@@ -227,13 +228,13 @@ covid_section_ui <- function(id) {
                "aria-label" = "Scrollable COVID-19 summary table",
                tableOutput(ns("summary"))),
       tags$p(class = "coverage",
-             "Totals add daily reports per million over the selected days. The peak uses the 7-day average.")),
+             "Totals add daily reports per million over the selected days; missing reports leave a total unavailable. The peak uses the 7-day average.")),
     tags$details(class = "methods",
       tags$summary("Data and interpretation"),
       tags$p("Daily cases and deaths come from Johns Hopkins University CSSE. The Stringency Index comes from the Oxford COVID-19 Government Response Tracker via Our World in Data."),
-      tags$p("Rates divide daily reports by 2021 population estimates (Korea 51.74 million, Taiwan 23.38 million) and average them over the current and previous six calendar days. The first six days of 2021 have no average."),
-      tags$p("Negative daily counts are reporting corrections. This section treats them as missing, so the 7-day averages stay non-negative. The COVID-19 ↔ Card spending section keeps them in its monthly sums."),
-      tags$p("The compressed scale uses the inverse hyperbolic sine. It shows small and large waves together and still draws zeros."),
+      tags$p("Rates use fixed 2021 population denominators (Korea 51.74 million projected residents, Taiwan 23.38 million year-end registered residents). These national population definitions differ. A 7-day average requires reports for the current and previous six calendar days; the first six days of 2021 have no average."),
+      tags$p("Negative daily counts are reporting corrections and are retained, consistently with the COVID-19 ↔ Card spending monthly sums."),
+      tags$p("The compressed scale uses the inverse hyperbolic sine. It shows small and large waves together and retains zeros and negative reporting corrections."),
       tags$p("Policy dates: Taiwan’s nationwide Level 3 alert (19 May 2021), Korea’s first gradual recovery phase (1 Nov 2021), the end of Korea’s social distancing rules (18 Apr 2022), and the end of Taiwan’s mandatory arrival quarantine (13 Oct 2022). They give context and do not imply cause."),
       tags$p("Reported counts depend on testing and reporting practices in each country. These charts describe patterns and do not estimate policy effects."))
   )

@@ -86,6 +86,28 @@ stopifnot(nrow(covid_daily) == 1460L, all(covid_daily$cases_pm >= 0, na.rm = TRU
 korea_daily <- subset(covid_daily, country == "Korea")
 day <- which(korea_daily$date == as.Date("2021-03-01"))
 stopifnot(isTRUE(all.equal(korea_daily$cases_7day[day], mean(korea_daily$cases_pm[(day - 6):day], na.rm = TRUE))))
+# Missing calendar days must not turn a seven-day mean into a shorter average.
+days <- seq(as.Date("2021-01-01"), by = "day", length.out = 15)
+gap_mean <- trailing_mean((1:15)[-8], days[-8])
+stopifnot(gap_mean[7] == 4, all(is.na(gap_mean[8:13])), gap_mean[14] == 12)
+missing_mean <- trailing_mean(c(1:7, NA, 9:15), days)
+stopifnot(all(is.na(missing_mean[8:14])), missing_mean[15] == 12)
+local({
+  fixture <- tempfile("covid-reports-")
+  dir.create(fixture)
+  on.exit(unlink(fixture, recursive = TRUE))
+  raw <- read.csv("data/covid_daily.csv", fileEncoding = "UTF-8-BOM")
+  corrected <- which(raw$country_code == "KOR" & raw$date == "2021-01-07")
+  raw$jhu_new_confirmed[corrected] <- -100
+  write.csv(raw, file.path(fixture, "covid_daily.csv"), row.names = FALSE)
+  daily <- read_covid_daily(fixture)
+  january <- subset(daily, country == "Korea" & date < as.Date("2021-02-01"))
+  monthly <- subset(read_covid(fixture), country == "Korea" & covid_date == as.Date("2021-01-01"))
+  stopifnot(january$cases_pm[7] < 0,
+            isTRUE(all.equal(sum(january$cases_pm), monthly$cases / covid_population[["Korea"]] * 1e6)))
+  january$cases_pm[1] <- NA_real_
+  stopifnot(is.na(covid_summary(january)[["Cases per million (total)"]]))
+})
 testServer(covid_section_server, args = list(data = covid_daily), {
   session$setInputs(country = "both", view = "trend", metric = "cases", compressed = FALSE,
                     events = TRUE, dates = as.Date(c("2021-01-01", "2022-12-31")))
