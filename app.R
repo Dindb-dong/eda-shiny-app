@@ -1,5 +1,15 @@
+# COVID-19 and card spending: South Korea vs Taiwan
+# Tab code lives in R/ (COVID-19 timeline: R/tab_covid.R) and src/ (spending analysis).
+
 library(shiny)
+library(dplyr)
 library(ggplot2)
+library(readr)
+
+source("R/covid_data.R")
+source("R/tab_covid.R")
+
+covid_timeline_data <- load_covid_daily("data/covid_daily.csv")
 
 source("src/analysis.R", local = TRUE)
 source("src/plots.R", local = TRUE)
@@ -138,6 +148,7 @@ ui <- fluidPage(
     htmltools::tagAppendAttributes(
       navlistPanel(id = "section", selected = "joint", widths = c(3, 9), well = FALSE,
         tabPanel("COVID-19 comparison", value = "covid", covid_section_ui("covid_daily")),
+        tabPanel("COVID-19 timeline", value = "covid_timeline", covidTabUI("covid_timeline")),
         tabPanel("Card spending comparison", value = "cards",
           card_section_ui("card_comparison", c(card_comparison$start, card_comparison$end))),
         tabPanel("COVID-19 ↔ Card spending", value = "joint", relationship_ui)
@@ -291,6 +302,8 @@ server <- function(input, output, session) {
       write.csv(d, file, row.names = FALSE, na = "")
     }
   )
+
+  covidTabServer("covid_timeline", covid_timeline_data)
 }
 
 shinyApp(ui, server)
