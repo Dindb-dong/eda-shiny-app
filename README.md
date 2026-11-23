@@ -28,11 +28,11 @@ install.packages(c("shiny", "ggplot2"))
 shiny::runApp()
 ```
 
-Run `Rscript tests/check-app.R` from the same directory to render the documented dashboard views and check the monthly joins, date cutoffs, forecast inputs, and CSV download.
+Run `Rscript tests/check-app.R` from the same directory to render the documented dashboard views and check the monthly joins, date cutoffs, forecast inputs, and CSV download. Run `Rscript tests/check-card-section.R` for the nationwide card-comparison calculations, chart options, and CSV export.
 
 ## Dashboard Tour
 
-Select **COVID-19 ↔ Card spending** in the left navigation to open the four tabs below. **COVID-19 comparison** and **Card spending comparison** currently show placeholders.
+Select **COVID-19 ↔ Card spending** in the left navigation to open the four tabs below. **Card spending comparison** opens the nationwide comparison described below. **COVID-19 comparison** currently shows a placeholder.
 
 | Tab | Question | Views |
 | :-- | :-- | :-- |
@@ -46,6 +46,16 @@ The spending filters use the 2019 index, year-over-year and month-over-month gro
 **Date coverage.** The card-only views use Jan 2014–Dec 2022, with Jan 2020 as the common cutoff. The relationship views can pair only Jan 2021–Dec 2022. A positive lead means the COVID-19 measure is from an earlier calendar month than the spending observation. No COVID-19 values are filled in for earlier years.
 
 **Forecast and break models.** The fixed 2019 holdout trains through 2018 and compares seasonal naïve, additive Holt–Winters on log spending, and log-scale SARIMA (0,1,1)(0,1,1)[12] using MAE and RMSE in index points. A separate 2020–2022 projection refits through 2019. The segmented model estimates the January 2020 level break and change in monthly log slope with calendar-month effects and AR(1) errors. Both serve as descriptive historical references. Concurrent shocks and coverage changes can affect the apparent break.
+
+### Nationwide card spending comparison
+
+**Card spending comparison** integrates the standalone app supplied in [PR #5](https://github.com/Dindb-dong/eda-shiny-app/pull/5) into the existing navigation and report layout. The shared card/CPI window is January 2014–August 2023. Choose the total or any of eight categories, either country or both, and monthly values, a trailing 12-month average, or year-over-year growth. The default is a CPI-adjusted index with each country-category's 2014 monthly average equal to 100. Nominal indices and local currency amounts are also available; different currencies have separate panels.
+
+The seven non-EC categories use offline spending. Taiwan e-commerce sums the online components of those seven categories; Korea supplies a separate EC series. Excluding Other also removes Taiwan's online Other but cannot do so for Korea's pre-aggregated EC series. The UI explains this asymmetry. Category labels and source coverage are approximate matches; this broader extract does not replace the joint analysis's food/apparel proxies or 2019 index.
+
+All indices, moving averages, and calendar-year comparisons are computed before clipping the displayed dates. Missing months remain missing rather than shifting the year-over-year lag or being counted as zero. The summary and CSV expose the selected monthly data, including original amounts, CPI, unit treatment and the Other-exclusion setting. Optional COVID shading and supplied reference restriction windows are chart annotations, not estimated treatment effects.
+
+The original data files and their available provenance are in [`data/card_comparison/`](data/card_comparison/README.md). The contributor identifies Taiwan's card source as NCCC but has not yet supplied the Korean card and CPI source references.
 
 ## Course Methods
 

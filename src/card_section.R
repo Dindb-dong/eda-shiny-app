@@ -233,7 +233,7 @@ card_section_server <- function(id, data) {
     comparable <- reactive(req(input$unit) != "local" || req(input$series) == "yoy")
     layout <- reactive({
       d <- selected()
-      width <- session$clientData$output_chart_width
+      width <- session$clientData[[paste0("output_", session$ns("chart"), "_width")]]
       if (is.null(width) || !is.finite(width) || width <= 0) width <- 1000
       count <- if (comparable()) length(unique(d$panel)) else nrow(unique(d[c("country", "panel")]))
       columns <- if (width < 590 || count == 1L) 1L else 2L
