@@ -127,6 +127,8 @@ historical_projection <- function(g) {
 seasonal_decomposition <- function(g) {
   parts <- stl(ts(log(g$amount_local), frequency = 12), s.window = "periodic", robust = TRUE)$time.series
   components <- c("Trend", "Seasonal", "Remainder")
+  # stl() returns seasonal before trend; select by name to match the display order.
+  parts <- parts[, c("trend", "seasonal", "remainder"), drop = FALSE]
   data.frame(date = rep(g$date, 3), panel = g$panel[1],
              component = factor(rep(components, each = nrow(g)), levels = components),
              value = as.vector(parts))
