@@ -17,14 +17,14 @@
 
 > How are COVID-19 cases, deaths, and government restriction stringency associated with changes in credit card spending in South Korea and Taiwan during 2021–2022?
 
-The R Shiny dashboard joins each country's card spending to its own COVID-19 series. It uses national COVID-19 measures for each selected card-spending area.
+The R Shiny dashboard joins each country's card spending to its own COVID-19 series. It covers seven spending categories and uses national COVID-19 measures for each selected card-spending area.
 
 ## Run locally
 
 Run from the repository root with R installed.
 
 ```r
-install.packages(c("shiny", "ggplot2"))
+install.packages(c("shiny", "ggplot2", "dplyr", "readr"))
 shiny::runApp()
 ```
 
@@ -38,10 +38,11 @@ The daily rates use fixed 2021 denominators: Korea's projected population of 51,
 
 Policy markers follow official announcements: [Taiwan's nationwide Level 3 alert, 19 May 2021](https://www.cdc.gov.tw/Category/ListContent/DORF6Hp-BCcnAc7p4PDSGQ?uaid=VN_6yeoBTKhRKoSy2d0hJQ), [Korea's gradual recovery phase, 1 November 2021](https://www.mohw.go.kr/gallery.es?act=view&bid=0003&list_no=368423&mid=a10605040000), [Korea's distancing relaxation, 18 April 2022](https://www.korea.net/Government/Briefing-Room/Press-Releases/view?articleId=371146&insttCode=A260111&type=N), and [Taiwan's end of arrival quarantine, 13 October 2022](https://www.cdc.gov.tw/En/Bulletin/Detail/nEBLnOPooDYFy_CBJqfWvg?typeid=158). They provide context rather than estimates of policy effects.
 
-Select **Card spending comparison** to open the nationwide comparison described below. Select **COVID-19 ↔ Card spending** to open the four tabs below.
+Select **Card spending comparison** to open the nationwide comparison described below. Select **COVID-19 ↔ Card spending** to open the five views below.
 
 | Tab | Question | Views |
 | :-- | :-- | :-- |
+| **Industry overview** | Which industries rose or fell, and where did capital and non-capital trends diverge? | Monthly heatmaps of year-over-year growth and the same-month capital minus non-capital gap in percentage points. All seven industries appear together. Select a period and country, then open an industry’s scatterplot or spending timeline. |
 | **Relationship** | Within each country, how did spending move with reported cases, deaths, or restrictions? | Linear and LOESS scatter fits, aligned series, 0–3 month lag profile, trend- and season-adjusted association, stringency bands, and descriptive ordinal and logistic spending outcomes. |
 | **Before and since onset** | How did spending change in the capital area and elsewhere? | Timeline, calendar heatmap, ECDF and boxplots, pre-COVID trend projection, three forecasting methods, and segmented regression with AR(1) errors. |
 | **Diagnostics** | Do seasonality, autocorrelation, distribution shape, or influential months change the interpretation? | Robust STL, ACF and PACF, normal and two-period Q–Q, quantile mean–difference, location–spread, Box–Cox, residuals, and Cook’s distance. |
@@ -57,7 +58,7 @@ The spending filters use the 2019 index, year-over-year and month-over-month gro
 
 **Card spending comparison** integrates the standalone app supplied in [PR #5](https://github.com/Dindb-dong/eda-shiny-app/pull/5) into the existing navigation and report layout. The shared card/CPI window is January 2014–August 2023. Choose the total or any of eight categories, either country or both, and monthly values, a trailing 12-month average, or year-over-year growth. The default is a CPI-adjusted index with each country-category's 2014 monthly average equal to 100. Nominal indices and local currency amounts are also available; different currencies have separate panels.
 
-The seven non-EC categories use offline spending. Taiwan e-commerce sums the online components of those seven categories; Korea supplies a separate EC series. Excluding Other also removes Taiwan's online Other but cannot do so for Korea's pre-aggregated EC series. The UI explains this asymmetry. Category labels and source coverage are approximate matches; this broader extract does not replace the joint analysis's food/apparel proxies or 2019 index.
+The seven non-EC categories use offline spending. Taiwan e-commerce sums the online components of those seven categories; Korea supplies a separate EC series. Excluding Other also removes Taiwan's online Other but cannot do so for Korea's pre-aggregated EC series. The UI explains this asymmetry. Category labels and source coverage are approximate matches; this separate nationwide extract and its 2014 baseline differ from the joint analysis’s regional extract and 2019 baseline.
 
 All indices, moving averages, and calendar-year comparisons are computed before clipping the displayed dates. Missing months remain missing rather than shifting the year-over-year lag or being counted as zero. The summary and CSV expose the selected monthly data, including original amounts, CPI, unit treatment and the Other-exclusion setting. Optional COVID shading and supplied reference restriction windows are chart annotations, not estimated treatment effects.
 
@@ -98,8 +99,8 @@ Additional CSVs from the project bundle are available in [`data/`](data/).
 | :-- | :-- |
 | [`raw/`](data/raw/) | The 30 separate NCCC downloads, including the two website cross-checks. Taiwan Financial Supervisory Commission Banking Bureau datasets [38321 (2016), spending by age](https://data.gov.tw/en/datasets/38321), [38316 (2016), spending by income](https://data.gov.tw/dataset/38316), [79289 (2018), men's spending by age](https://data.gov.tw/en/datasets/79289), and [79290 (2018), women's spending by age](https://data.gov.tw/en/datasets/79290) are available under the [Open Government Data License, version 1.0](https://data.gov.tw/en/license). |
 | [`korea_national_2019_2022.csv`](data/korea_national_2019_2022.csv), [`taiwan_national_2019_2022.csv`](data/taiwan_national_2019_2022.csv), [`taiwan_demographics_2019_2022.csv`](data/taiwan_demographics_2019_2022.csv) | Country-specific monthly card spending from ECOS and NCCC under the terms above. The demographic file adds mean transaction amounts and age-band midpoints where available. |
-| [`card_spending_pre_covid_2014_2019.csv`](data/card_spending_pre_covid_2014_2019.csv) | National monthly spending before COVID-19 for the same food and apparel proxies. Uses ECOS national totals and NCCC C02 Taiwan totals. The 2019 amounts match `common_panel.csv`. |
-| [`card_spending_by_capital_area_pre_covid_2014_2019.csv`](data/card_spending_by_capital_area_pre_covid_2014_2019.csv), [`card_spending_by_capital_area_since_covid_onset_2020_2022.csv`](data/card_spending_by_capital_area_since_covid_onset_2020_2022.csv) | Monthly local-currency spending by capital area before and since the onset of COVID-19. See the definitions below. |
+| [`card_spending_pre_covid_2014_2019.csv`](data/card_spending_pre_covid_2014_2019.csv) | National monthly spending before COVID-19 for seven categories. Uses ECOS national totals and NCCC C02 Taiwan totals. The 2019 food and apparel amounts match `common_panel.csv`. |
+| [`card_spending_by_capital_area_pre_covid_2014_2019.csv`](data/card_spending_by_capital_area_pre_covid_2014_2019.csv), [`card_spending_by_capital_area_since_covid_onset_2020_2022.csv`](data/card_spending_by_capital_area_since_covid_onset_2020_2022.csv) | Monthly local-currency spending by capital area for seven categories before and since the onset of COVID-19. See the definitions below. |
 | [`industry_crosswalk.csv`](data/industry_crosswalk.csv), [`candidate_panel.csv`](data/candidate_panel.csv) | Category mappings and candidate comparisons derived from the ECOS and NCCC series. The narrower food and apparel comparison is in `common_panel.csv`. |
 | [`annual_changes.csv`](data/annual_changes.csv), [`analysis_metrics.csv`](data/analysis_metrics.csv), [`reconciliation.csv`](data/reconciliation.csv), [`robust_summary.csv`](data/robust_summary.csv) | Project summaries and data checks derived from the card spending inputs. |
 | [`excess_mortality.csv`](data/excess_mortality.csv) | South Korea and Taiwan observations from [Our World in Data](https://ourworldindata.org/grapher/excess-mortality-p-scores), based on the [Human Mortality Database Short-term Mortality Fluctuations series](https://www.mortality.org/Data/STMF) (CC BY 4.0), [Karlinsky and Kobak's World Mortality Dataset](https://github.com/akarlinsky/world_mortality) (MIT) and [baseline estimates](https://github.com/dkobak/excess-mortality), and [OWID population estimates](https://ourworldindata.org/population-sources) (CC BY 4.0). |
@@ -112,16 +113,18 @@ The original `covid_daily.csv` also includes vaccination rates from [Our World i
 ### Capital-area card spending
 
 - **Korea.** `capital` sums Seoul (`A`), Incheon (`D`), and Gyeonggi (`L`) under [Article 2 of the enforcement decree](https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=277967). In ECOS `601Y002`, use monthly totals (`TOT`) and convert million won to won. `unallocated` is the source's Other (`Z`) series, and `non_capital` is the national total (`X`) minus `capital` and `unallocated`.
-- **Taiwan.** `capital` sums Taipei (`TPE`), New Taipei (`NTP`), and Keelung (`KLC`). This city-level definition includes all of New Taipei, including Yingge, and excludes Taoyuan. `non_capital` sums the other 19 cities and counties. Amounts sum the published age bands for `FD` and `CT` from the [NCCC C02 API](https://www.nccc.com.tw/wps/wcm/connect/zh/home/openinformation/Open%20API). The 22 city and county totals reconcile to the published Taiwan series for every month and proxy, so `unallocated` is zero throughout. [Taiwan transport institute reference for the Taipei metropolitan area](https://www.iot.gov.tw/uploads/asset/data/66195d70367376304acd4ca6/%E4%BA%A4%E9%80%9A%E8%A1%8C%E5%8B%95%E6%9C%8D%E5%8B%99%28MaaS%29%E5%BE%8C%E7%BA%8C%E6%93%B4%E5%85%85%E8%88%87%E6%8E%A8%E5%BB%A3%E7%AD%96%E7%95%A5%E8%A6%8F%E5%8A%83.pdf)
+- **Taiwan.** `capital` sums Taipei (`TPE`), New Taipei (`NTP`), and Keelung (`KLC`). This city-level definition includes all of New Taipei, including Yingge, and excludes Taoyuan. `non_capital` sums the other 19 cities and counties. Amounts sum the published age bands for `FD`, `CT`, `EE`, `DP`, `LG`, `TR`, and `OT` from the [NCCC C02 API](https://www.nccc.com.tw/wps/wcm/connect/zh/home/openinformation/Open%20API). The 22 city and county totals reconcile to the published Taiwan series for every month and proxy, so `unallocated` is zero throughout. [Taiwan transport institute reference for the Taipei metropolitan area](https://www.iot.gov.tw/uploads/asset/data/66195d70367376304acd4ca6/%E4%BA%A4%E9%80%9A%E8%A1%8C%E5%8B%95%E6%9C%8D%E5%8B%99%28MaaS%29%E5%BE%8C%E7%BA%8C%E6%93%B4%E5%85%85%E8%88%87%E6%8E%A8%E5%BB%A3%E7%AD%96%E7%95%A5%E8%A6%8F%E5%8A%83.pdf)
 
-The regions describe where card spending is recorded. The COVID-19 extract still has country-level geographic resolution.
+The [industry crosswalk](data/industry_crosswalk.csv) lists the source codes for food and dining, apparel and accessories, health/education/recreation, general retail, lodging/furniture/appliances, vehicles/air travel, and source-defined Other. The first two retain the original definitions. Health/education/recreation and general retail are approximate. Lodging and vehicles cover narrower Korean proxies, and Other retains each source’s own definition. Interpret these three series within each country. E-commerce in the nationwide tab is a separate channel with different source coverage.
+
+The added monthly amounts were retrieved from ECOS and NCCC C02 on 23 November 2026. For every added Taiwan series, the sum of all 22 city and county amounts matches the published national figure. For 2019–2022, both countries’ added national totals also match the corresponding source codes in the repository’s national extracts. The regions describe where card spending is recorded. The COVID-19 extract still has country-level geographic resolution.
 
 Both regional files include `covid_period` and use January 2020 as the cutoff for both countries. `pre_covid` covers January 2014 through December 2019, and `since_covid_onset` covers January 2020 through December 2022.
 
 ## Analysis Approach
 
 1. **Compare the pandemic and spending series at a common frequency.** For the joint analysis, sum daily reported cases and deaths by month, average the daily Stringency Index, and align the results with spending by country and calendar month.
-2. **Compare relative spending changes.** Use each country and category's own 2019 average as the index baseline and use earlier card data to calculate year-over-year growth. Treat food and apparel as approximate matches because card coverage and category definitions differ.
+2. **Compare relative spending changes.** Use each country and category's own 2019 average as the index baseline and use earlier card data to calculate year-over-year growth. Use the industry crosswalk to check comparability before interpreting cross-country differences.
 3. **Check how much the interpretation depends on the comparison.** Compare patterns with cases, deaths, and stringency within each country. Show how the association changes with the spending measure, 0–3 month leads, or the exclusion of months affected by unusual shifts such as Taiwan's February 2021 changes.
 
 The joint window covers up to 24 months per country. Seasonality, shared trends, and differences in card coverage can all shape the apparent relationships. The synthesis will describe exploratory associations with those limits in view.

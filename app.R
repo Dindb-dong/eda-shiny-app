@@ -16,12 +16,15 @@ source("src/plots.R", local = TRUE)
 source("src/covid_section.R", local = TRUE)
 source("src/card_section.R", local = TRUE)
 
-spending <- read_spending()
+industry <- read_industry_crosswalk()
+categories <- setNames(industry$label_en, industry$category)
+spending <- read_spending(industry = industry)
 covid <- read_covid()
 covid_daily <- read_covid_daily()
-age_profile <- read_age_profile()
+age_profile <- read_age_profile(industry = industry)
 card_comparison <- read_card_comparison()
 
+overview_views <- c(industry_growth = "Spending growth by area", industry_gap = "Capital–non-capital gap")
 relationship_views <- c(scatter = "Monthly scatter", aligned = "Aligned timeline",
                         lags = "Lag profile", adjusted = "Detrended and seasonally adjusted scatter",
                         conditioning = "Condition on restriction stringency",
@@ -39,7 +42,7 @@ diagnostic_views <- c(stl = "Robust seasonal decomposition (STL)", acf = "Autoco
 age_views <- c(age_observed = "Observed mean ticket by age and month",
                age_compare = "Ordinary and robust bivariate LOESS",
                age_residual = "Robust LOESS residual map")
-view_names <- c(relationship_views, spending_views, diagnostic_views, age_views)
+view_names <- c(overview_views, relationship_views, spending_views, diagnostic_views, age_views)
 paired_diagnostics <- c("residuals", "cook", "fitted_resid")
 fixed_stringency <- c("outcomes", "binary")
 forecast_views <- c("forecast", "backtest")
@@ -50,6 +53,8 @@ spending_choices <- c("Year-over-year growth" = "yoy", "2019 index" = "index",
                       "Month-over-month growth" = "monthly", "First + seasonal difference" = "double_diff")
 
 chart_notes <- c(
+  industry_growth = "Each cell shows spending growth from the same month a year earlier. Orange indicates a decline and teal indicates growth.",
+  industry_gap = "Each cell subtracts non-capital growth from capital-area growth in the same industry and month. Teal means growth was higher in the capital area.",
   scatter = "Each point is one spending month. The dashed line is linear. The purple line is a local linear fit (LOESS).",
   aligned = "Both series are standardized within their own paired window. The horizontal axis follows the spending month.",
   lags = "Each point uses a separate calendar-month join. Counts fall at longer leads as the matched window gets shorter.",
@@ -84,7 +89,8 @@ chart_notes <- c(
 uses_covid_options <- "input.tab === 'relationship' || (input.tab === 'diagnostics' && ['residuals','cook','fitted_resid'].includes(input.diagnostic_view))"
 
 relationship_ui <- tagList(
-  tabsetPanel(id = "tab",
+  tabsetPanel(id = "tab", selected = "overview",
+    tabPanel("Industry overview", value = "overview"),
     tabPanel("Relationship", value = "relationship"),
     tabPanel("Before and since onset", value = "spending"),
     tabPanel("Diagnostics", value = "diagnostics"),
@@ -92,11 +98,20 @@ relationship_ui <- tagList(
   tags$div(class = "filter-grid main-filters",
     conditionalPanel("input.tab !== 'age'",
       selectInput("country", "Country", c("Korea and Taiwan" = "both", "Korea", "Taiwan"), selectize = FALSE)),
-    conditionalPanel("input.tab !== 'age'",
+    conditionalPanel("!['age','overview'].includes(input.tab)",
       selectInput("area", "Geography", c(choices(areas), "Capital and non-capital areas" = "both"), selectize = FALSE)),
-    selectInput("category", "Card category", choices(categories), selectize = FALSE),
-    conditionalPanel("input.tab !== 'age'",
-      selectInput("measure", "Spending measure", spending_choices, selectize = FALSE))),
+    conditionalPanel("input.tab !== 'overview'",
+      selectInput("category", "Card category", choices(categories), selectize = FALSE)),
+    conditionalPanel("!['age','overview'].includes(input.tab)",
+      selectInput("measure", "Spending measure", spending_choices, selectize = FALSE)),
+    conditionalPanel("input.tab === 'overview'",
+      selectInput("overview_view", "View",
+                  c("Growth by area" = "industry_growth", "Capital area gap" = "industry_gap"),
+                  selectize = FALSE)),
+    conditionalPanel("input.tab === 'overview'",
+      selectInput("overview_period", "Spending period",
+                  c("2020–2022" = "since_covid_onset", "2015–2019" = "pre_covid", "2015–2022" = "all"),
+                  selectize = FALSE))),
   tags$div(class = "filter-grid analysis-options",
     conditionalPanel("input.tab === 'relationship'",
       selectInput("relationship_view", "View", choices(relationship_views), selectize = FALSE)),
@@ -121,9 +136,17 @@ relationship_ui <- tagList(
     tags$p(class = "chart-note", textOutput("note", inline = TRUE)),
     plotOutput("chart", height = "auto"),
     tags$p(class = "coverage", textOutput("coverage", inline = TRUE))),
+  conditionalPanel("input.tab === 'overview'",
+    tags$section(class = "analysis-section", "aria-labelledby" = "industry-detail-title",
+      tags$h2(id = "industry-detail-title", "Explore an industry"),
+      tags$div(class = "filter-grid analysis-options industry-detail-controls",
+        selectInput("detail_category", "Industry for detail", choices(categories), selectize = FALSE),
+        selectInput("detail_view", "Detail view", c("COVID-19 scatterplot" = "relationship",
+                                                    "Spending timeline" = "spending"), selectize = FALSE),
+        actionButton("open_industry_detail", "Open detail", class = "industry-detail-button")))),
   tags$section(class = "analysis-section", "aria-labelledby" = "summary-title",
     tags$div(class = "section-header",
-      tags$h2(id = "summary-title", "Summary by country and area"),
+      tags$h2(id = "summary-title", textOutput("summary_title", inline = TRUE)),
       downloadLink("download", "Download CSV")),
     tags$div(class = "table-scroll", tabindex = "0", role = "region", "aria-label" = "Scrollable summary table",
              tableOutput("summary")),
@@ -134,12 +157,23 @@ relationship_ui <- tagList(
     tags$p("Cases and deaths are daily reports summed by month. Negative reporting adjustments are retained. Stringency is averaged by month. Count plots use an inverse hyperbolic sine scale, which retains zeros."),
     tags$p("The nationwide spending totals include unassigned amounts. Capital and non-capital series exclude them. Korea uses Seoul, Incheon, and Gyeonggi. Taiwan uses Taipei, New Taipei, and Keelung."),
     tags$p("Spending amounts are nominal and source coverage varies by country and category. The 2019 index uses each series’ own 2019 average. The same-month median uses 2014–2019. Growth and differences are calculated before filtering by period."),
+    tags$p("Industry categories use each source’s definitions. Lodging, vehicles and source-defined Other are best read within each country. National COVID-19 measures are shared by both spending areas."),
     tags$p("The joined series has at most 24 months per country and region. Shared trends, extreme months, and serial dependence can drive the fitted patterns. These charts describe associations."))
 )
 
 ui <- fluidPage(
   lang = "en", title = "COVID-19 and card spending",
-  tags$head(tags$link(rel = "stylesheet", href = "dashboard.css")),
+  tags$head(
+    tags$link(rel = "stylesheet", href = "dashboard.css"),
+    tags$script(HTML("
+      document.addEventListener('DOMContentLoaded', () => {
+        Shiny.addCustomMessageHandler('focus-industry-detail-tab', (target) => {
+          const tabs = Array.from(document.querySelectorAll('#tab > li > a'));
+          tabs.find(tab => tab.dataset.value === target)?.focus();
+        });
+      });
+    "))
+  ),
   tags$main(
     class = "dashboard",
     tags$header(class = "masthead",
@@ -163,8 +197,29 @@ server <- function(input, output, session) {
   card_section_server("card_comparison", card_comparison)
 
   active_view <- reactive(switch(req(input$tab),
+    overview = req(input$overview_view),
     relationship = req(input$relationship_view), spending = req(input$spending_view),
     diagnostics = req(input$diagnostic_view), age = req(input$age_view)))
+
+  selected_countries <- reactive(if (req(input$country) == "both") unname(countries) else input$country)
+  overview_data <- reactive(industry_months(spending, selected_countries(), req(input$overview_period),
+                                            req(input$overview_view)))
+  overview_unit <- reactive(if (active_view() == "industry_gap") "Gap (percentage points)" else "Growth (%)")
+
+  observeEvent(input$open_industry_detail, {
+    target <- req(input$detail_view)
+    updateSelectInput(session, "category", selected = req(input$detail_category))
+    updateSelectInput(session, "area", selected = "both")
+    updateSelectInput(session, "measure", selected = "yoy")
+    if (target == "relationship") {
+      updateSelectInput(session, "relationship_view", selected = "scatter")
+    } else {
+      updateSelectInput(session, "spending_view", selected = "timeline")
+      updateSelectInput(session, "period", selected = req(input$overview_period))
+    }
+    updateTabsetPanel(session, "tab", selected = target)
+    session$sendCustomMessage("focus-industry-detail-tab", target)
+  })
 
   analysis_measure <- reactive({
     view <- active_view()
@@ -175,9 +230,8 @@ server <- function(input, output, session) {
   analysis_metric <- reactive(if (active_view() %in% fixed_stringency) "stringency" else req(input$metric))
 
   selection <- reactive({
-    country <- if (req(input$country) == "both") unname(countries) else input$country
     area <- if (req(input$area) == "both") c("capital", "non_capital") else input$area
-    d <- spending[spending$country %in% country & spending$capital_area %in% area &
+    d <- spending[spending$country %in% selected_countries() & spending$capital_area %in% area &
                     spending$category == req(input$category), , drop = FALSE]
     if (identical(area, "national")) d$panel <- d$country
     d$value <- d[[analysis_measure()]]
@@ -210,6 +264,10 @@ server <- function(input, output, session) {
     }
     width <- session$clientData$output_chart_width %||% 1000
     columns <- if (width >= 590) 2L else 1L
+    if (active_view() %in% names(overview_views)) {
+      rows <- ceiling(length(unique(overview_data()$panel)) / columns)
+      return(list(columns = columns, height = 252L * rows + 65L))
+    }
     groups <- length(unique(selection()$panel))
     plots <- if (active_view() == "stl") groups * 3L else groups
     rows <- ceiling(plots / columns)
@@ -218,8 +276,16 @@ server <- function(input, output, session) {
 
   output$title <- renderText(view_names[[active_view()]])
   output$note <- renderText(chart_notes[[active_view()]])
+  output$summary_title <- renderText({
+    if (active_view() == "industry_gap") "Summary by country and industry" else "Summary by country and area"
+  })
   output$coverage <- renderText({
     view <- active_view()
+    if (view %in% names(overview_views)) {
+      d <- overview_data()
+      return(paste(format(min(d$date), "%b %Y"), "–", format(max(d$date), "%b %Y"),
+                   paste0("· ", length(categories), " industries · Monthly card spending")))
+    }
     if (req(input$tab) == "age") return("Taiwan nationwide · Jan 2019 – Dec 2022 · 12 bounded age bands")
     if (view == "backtest") return("Jan–Dec 2019 · One fixed 12-month holdout")
     if (view == "forecast") return("Jan 2020 – Dec 2022 · Forecast gaps describe departures from the reference models.")
@@ -233,6 +299,7 @@ server <- function(input, output, session) {
   output$chart <- renderPlot({
     columns <- layout()$columns
     view <- active_view()
+    if (view %in% names(overview_views)) return(industry_heatmap(overview_data(), categories, overview_unit(), columns))
     if (req(input$tab) == "age") return(age_plot(age_data(), view))
     if (view %in% forecast_views) return(forecast_plot(predicted(), view, columns))
     if (view == "break_model") return(break_plot(segmented(), columns))
@@ -243,6 +310,11 @@ server <- function(input, output, session) {
       diagnostics = diagnostic_plot(selection(), if (uses_pairs()) paired() else NULL,
                                     view, input$measure, columns))
   }, alt = function() {
+    if (active_view() %in% names(overview_views)) {
+      return(paste("Heatmap of", view_names[[active_view()]], "for",
+                   paste(selected_countries(), collapse = " and "),
+                   "with industries in rows and months in columns. Exact values are available as CSV."))
+    }
     area_names <- if (req(input$tab) == "age") "Taiwan nationwide"
                   else paste(unique(selection()$panel), collapse = " and ")
     paste(view_names[[active_view()]], "for", area_names)
@@ -251,6 +323,14 @@ server <- function(input, output, session) {
 
   output$summary <- renderTable({
     view <- active_view()
+    if (view %in% names(overview_views)) {
+      d <- overview_data()
+      return(by_series(d, function(g) {
+        valid <- is.finite(g$value)
+        data.frame(Series = g$panel[1], Industry = unname(categories[g$category[1]]),
+                   Months = sum(valid), Median = median(g$value[valid]), Unit = overview_unit())
+      }, keys = c("panel", "category")))
+    }
     if (req(input$tab) == "age") {
       d <- age_data()
       return(data.frame(Model = c("Ordinary LOESS", "Robust LOESS"), Cells = nrow(d),
@@ -286,9 +366,19 @@ server <- function(input, output, session) {
   }, digits = 2, spacing = "s", width = "100%", na = "—")
 
   output$download <- downloadHandler(
-    filename = function() paste0("card-spending-", input$tab, ".csv"),
+    filename = function() {
+      suffix <- if (req(input$tab) == "overview") req(input$overview_view) else input$tab
+      paste0("card-spending-", suffix, ".csv")
+    },
     content = function(file) {
       view <- active_view()
+      if (view %in% names(overview_views)) {
+        d <- overview_data()
+        d$industry <- unname(categories[d$category])
+        names(d)[names(d) == "value"] <- if (view == "industry_gap") "gap_pp" else "yoy_pct"
+        write.csv(d, file, row.names = FALSE, na = "")
+        return(invisible(NULL))
+      }
       if (req(input$tab) == "age") {
         write.csv(age_data(), file, row.names = FALSE, na = "")
         return(invisible(NULL))

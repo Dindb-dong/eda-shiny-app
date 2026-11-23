@@ -21,6 +21,27 @@ panel_grid <- function(columns = 2L, scales = "fixed") {
 
 calendar_axis <- function() scale_x_date(date_breaks = "2 years", date_labels = "%Y")
 
+industry_heatmap <- function(d, categories, unit, columns) {
+  width_in_years <- if (diff(range(d$month)) > 500L) 2L else 1L
+  years <- seq(as.integer(format(min(d$date), "%Y")), as.integer(format(max(d$date), "%Y")),
+               by = width_in_years)
+  limit <- max(1, abs(d$value[is.finite(d$value)]))
+  labels <- vapply(categories, function(label) paste(strwrap(label, 25L), collapse = "\n"), character(1))
+  d$month_id <- month_id(d$date)
+  d$category <- factor(d$category, levels = rev(names(categories)))
+  ggplot(d, aes(month_id, category, fill = value)) +
+    geom_tile(width = 1, height = .9) +
+    scale_x_continuous(breaks = 12L * years + 1L, labels = years) +
+    scale_y_discrete(labels = labels) +
+    scale_fill_gradient2(low = orange, mid = neutral, high = teal, midpoint = 0,
+                         limits = c(-limit, limit), na.value = "#dedede") +
+    labs(x = NULL, y = NULL, fill = unit) +
+    facet_wrap(vars(panel), ncol = columns, labeller = labeller(panel = label_wrap_gen(16L + 12L * (columns > 1L)))) +
+    chart_theme + theme(panel.grid = element_blank(),
+                        axis.text.y = element_text(size = 9, lineheight = .85),
+                        strip.text = element_text(size = 10, lineheight = .9))
+}
+
 relationship_plot <- function(paired, spending, covid, view, metric, measure, omit_feb, columns) {
   y_label <- spending_measures[[measure]]
   x_label <- covid_measures[[metric]]
@@ -73,7 +94,7 @@ relationship_plot <- function(paired, spending, covid, view, metric, measure, om
       geom_line(data = curves, aes(x, probability), colour = blue, linewidth = .85) +
       scale_y_continuous(breaks = c(0, .25, .5, .75, 1), labels = scales::label_percent()) +
       labs(x = "Restriction stringency (0–100)", y = "Observed outcome / fitted probability") + grid + chart_theme
-    if (nrow(labels)) p <- p + geom_text(data = labels, aes(x = Inf, y = .5, label = "Sparse or separated outcomes"),
+    if (nrow(labels)) p <- p + geom_text(data = labels, x = Inf, y = .5, label = "Sparse or separated outcomes",
                                        inherit.aes = FALSE, hjust = 1.06, size = 3, colour = quiet)
     return(p)
   }

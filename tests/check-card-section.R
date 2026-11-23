@@ -5,7 +5,7 @@ source("app.R")
 stopifnot(card_comparison$start == as.Date("2014-01-01"),
           card_comparison$end == as.Date("2023-08-01"),
           nrow(card_comparison$data) == 116L * 22L,
-          nrow(spending) == 1296L)
+          nrow(subset(spending, category %in% c("food", "apparel"))) == 1296L)
 raw <- card_comparison$data
 all_categories <- names(card_category_labels)
 total <- card_aggregate(raw)
