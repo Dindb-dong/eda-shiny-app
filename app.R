@@ -3,10 +3,12 @@ library(ggplot2)
 
 source("src/analysis.R", local = TRUE)
 source("src/plots.R", local = TRUE)
+source("src/covid_section.R", local = TRUE)
 source("src/card_section.R", local = TRUE)
 
 spending <- read_spending()
 covid <- read_covid()
+covid_daily <- read_covid_daily()
 age_profile <- read_age_profile()
 card_comparison <- read_card_comparison()
 
@@ -135,10 +137,7 @@ ui <- fluidPage(
       tags$h1("COVID-19 and card spending")),
     htmltools::tagAppendAttributes(
       navlistPanel(id = "section", selected = "joint", widths = c(3, 9), well = FALSE,
-        tabPanel("COVID-19 comparison", value = "covid",
-          tags$section(class = "analysis-section",
-            tags$h2("COVID-19 comparison"),
-            tags$p("This section is reserved for the comparison of Korea and Taiwan."))),
+        tabPanel("COVID-19 comparison", value = "covid", covid_section_ui("covid_daily")),
         tabPanel("Card spending comparison", value = "cards",
           card_section_ui("card_comparison", c(card_comparison$start, card_comparison$end))),
         tabPanel("COVID-19 ↔ Card spending", value = "joint", relationship_ui)
@@ -149,6 +148,7 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
+  covid_section_server("covid_daily", covid_daily)
   card_section_server("card_comparison", card_comparison)
 
   active_view <- reactive(switch(req(input$tab),

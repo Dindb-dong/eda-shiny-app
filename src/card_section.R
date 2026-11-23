@@ -115,10 +115,10 @@ card_transform <- function(data, unit = "real_index", series = "raw") {
 
 card_y_label <- function(unit, series) {
   if (series == "yoy") return("Year-over-year change (%)")
-  label <- switch(unit, local = "Korea: KRW trillion / Taiwan: NT$ billion",
-                   index = "Index, 2014 average = 100",
-                   real_index = "Inflation-adjusted index, 2014 average = 100")
-  if (series == "ma12") paste0(label, " · 12-month average") else label
+  label <- switch(unit, local = "Korea: KRW trillion\nTaiwan: NT$ billion",
+                   index = "Index\n2014 average = 100",
+                   real_index = "Inflation-adjusted index\n2014 average = 100")
+  if (series == "ma12") paste0(label, "\n12-month average") else label
 }
 
 card_comparison_plot <- function(d, unit, series, columns = 2L, free_y = FALSE,
@@ -242,7 +242,9 @@ card_section_server <- function(id, data) {
     output$title <- renderText(if (req(input$scope) == "total") "Total card spending" else "Card spending by category")
     output$note <- renderText({
       amount <- switch(req(input$unit),
-        local = "Local-currency amounts use separate country panels: KRW trillion and NT$ billion.",
+        local = if (req(input$series) == "yoy")
+          "Percentage changes in local-currency spending are compared across countries."
+        else "Local-currency amounts use separate country panels: KRW trillion and NT$ billion.",
         index = "Each country's selected series is indexed to its own 2014 monthly average of 100.",
         real_index = "CPI-adjusted amounts are indexed to each series' own 2014 monthly average of 100.")
       treatment <- switch(req(input$series), raw = "Monthly values retain seasonal variation.",
