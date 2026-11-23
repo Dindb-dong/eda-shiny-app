@@ -9,6 +9,16 @@ jan2019 <- subset(korea, month == 201901)
 stopifnot(isTRUE(all.equal(jan2020$yoy, 100 * (jan2020$amount_local / jan2019$amount_local - 1))),
           isTRUE(all.equal(jan2020$seasonal, 100 * log(jan2020$amount_local / jan2019$amount_local))))
 
+# The labelled STL rows must keep trend and seasonal values distinct.
+parts <- seasonal_decomposition(korea)
+expected_parts <- stl(ts(log(korea$amount_local), frequency = 12),
+                      s.window = "periodic", robust = TRUE)$time.series
+stopifnot(isTRUE(all.equal(parts$value[parts$component == "Trend"],
+                          as.numeric(expected_parts[, "trend"]))),
+          isTRUE(all.equal(parts$value[parts$component == "Seasonal"],
+                          as.numeric(expected_parts[, "seasonal"]))),
+          isTRUE(all.equal(rowSums(matrix(parts$value, ncol = 3)), log(korea$amount_local))))
+
 # Render every dashboard view through the real Shiny server.
 testServer(server, {
   session$setInputs(tab = "relationship", country = "both", area = "both", category = "food",
