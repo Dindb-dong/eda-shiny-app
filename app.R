@@ -3,10 +3,12 @@ library(ggplot2)
 
 source("src/analysis.R", local = TRUE)
 source("src/plots.R", local = TRUE)
+source("src/card_section.R", local = TRUE)
 
 spending <- read_spending()
 covid <- read_covid()
 age_profile <- read_age_profile()
+card_comparison <- read_card_comparison()
 
 relationship_views <- c(scatter = "Monthly scatter", aligned = "Aligned timeline",
                         lags = "Lag profile", adjusted = "Detrended and seasonally adjusted scatter",
@@ -138,9 +140,7 @@ ui <- fluidPage(
             tags$h2("COVID-19 comparison"),
             tags$p("This section is reserved for the comparison of Korea and Taiwan."))),
         tabPanel("Card spending comparison", value = "cards",
-          tags$section(class = "analysis-section",
-            tags$h2("Card spending comparison"),
-            tags$p("This section is reserved for the comparison of Korea and Taiwan."))),
+          card_section_ui("card_comparison", c(card_comparison$start, card_comparison$end))),
         tabPanel("COVID-19 ↔ Card spending", value = "joint", relationship_ui)
       ),
       class = "section-navigation"
@@ -149,6 +149,8 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
+  card_section_server("card_comparison", card_comparison)
+
   active_view <- reactive(switch(req(input$tab),
     relationship = req(input$relationship_view), spending = req(input$spending_view),
     diagnostics = req(input$diagnostic_view), age = req(input$age_view)))
