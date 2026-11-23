@@ -111,10 +111,10 @@ covid_event_layers <- function(events, labels) {
   layers
 }
 
-covid_country_scales <- function() list(
+covid_country_scales <- function(shapes = FALSE) list(
   scale_colour_manual(values = covid_country_colors, name = NULL),
   scale_linetype_manual(values = covid_country_lines, name = NULL),
-  scale_shape_manual(values = covid_country_shapes, name = NULL)
+  if (shapes) scale_shape_manual(values = covid_country_shapes, name = NULL)
 )
 
 covid_trend_plot <- function(d, metric, compressed, dates, events, narrow = FALSE) {
@@ -172,7 +172,7 @@ covid_scatter_plot <- function(d, metric, compressed) {
     geom_smooth(data = d[d$country %in% enough, , drop = FALSE], aes(linetype = country),
                 method = "loess", formula = y ~ x, method.args = list(degree = 1), span = .9,
                 se = FALSE, linewidth = .9) +
-    covid_country_scales() + covid_value_scale(metric, compressed) +
+    (if (nrow(d)) covid_country_scales(shapes = TRUE) else NULL) + covid_value_scale(metric, compressed) +
     scale_x_continuous(limits = c(0, 100), breaks = seq(0, 100, 25)) +
     labs(x = "Restriction stringency (0–100), same day",
          y = if (metric == "deaths") "Deaths per million (7-day average)" else "Cases per million (7-day average)") +
