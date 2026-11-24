@@ -13,3 +13,9 @@ The Oh My Canvas document **EDA Shiny · COVID-19 and Card Spending** contains t
 The **EDA Shiny · Industry overview** canvas contains desktop and mobile boards at 1160 and 390 pixels. The desktop board ID is `node_d9f53a7b09c14e1f82822a422e8b1ce6`. The mobile board ID is `node_98412dae10874e3f9f7da700358932ac`. The implementation uses the research layout’s native selects, tab underline, chart palette, and focusable summary region.
 
 The default joint-analysis subtab shows seven industry rows and calendar-month columns. The growth view facets by country and area, and the gap view facets by country. Both views share a zero-centered color scale across their visible panels. Narrow charts stack panels and wrap the facet headings. The detail controls open the chosen industry and move focus to the selected subtab. The summary accompanies the image, with exact plotted values available in the CSV.
+
+## COVID-19 comparison
+
+The **EDA Shiny · COVID-19 comparison and exploration** canvas shows the desktop filter panel and its 320 px version. The desktop board ID is `node_ad502f30511d42a9af85f997c9aa8b43`. The 320 px board ID is `node_4f3b7d726e4744b69345000498d7dd67`.
+
+Cases and deaths and Explore metrics share the same navigation underline and filter controls. Explore metrics opens on daily vaccination coverage. The date fields stack when the filter cell is narrow and sit side by side when that cell has room for both dates. The Shiny date picker keeps the start-to-end keyboard order. The layout follows the common chart theme and color scale, with separate line styles for Korea and Taiwan.

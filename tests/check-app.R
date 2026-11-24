@@ -149,9 +149,9 @@ local({
   write.csv(raw, file.path(fixture, "covid_daily.csv"), row.names = FALSE)
   daily <- read_covid_daily(fixture)
   january <- subset(daily, country == "Korea" & date < as.Date("2021-02-01"))
-  monthly <- subset(read_covid(fixture), country == "Korea" & covid_date == as.Date("2021-01-01"))
+  monthly <- subset(summarize_covid_monthly(daily), country == "Korea" & covid_date == as.Date("2021-01-01"))
   stopifnot(january$cases_pm[7] < 0,
-            isTRUE(all.equal(sum(january$cases_pm), monthly$cases / covid_population[["Korea"]] * 1e6)))
+            isTRUE(all.equal(sum(january$cases_pm), monthly$cases / covid_population[["KOR"]] * 1e6)))
   january$cases_pm[1] <- NA_real_
   stopifnot(is.na(covid_summary(january)[["Cases per million (total)"]]))
 })
@@ -169,5 +169,31 @@ testServer(covid_section_server, args = list(data = covid_daily), {
   stopifnot(nrow(downloaded) == 181L, all(downloaded$country == "Taiwan"))
   session$setInputs(view = "trend", events = FALSE, dates = as.Date(c("2021-05-01", "2021-06-15")))
   stopifnot(nrow(events()) == 0L, startsWith(output$chart$src, "data:image/png"))
+})
+testServer(covidTabServer, args = list(covid_daily = read_covid_daily()), {
+  start <- as.Date("2021-03-01")
+  session$setInputs(countries = unname(countries), metric = "new_cases", freq = "ma7",
+                    per_million = TRUE, log = FALSE, facet = FALSE)
+  for (days_selected in c(1L, 6L, 7L)) {
+    end <- start + days_selected - 1L
+    session$setInputs(dates = c(start, end))
+    expected <- subset(covid_daily, date >= start & date <= end)
+    stopifnot(nrow(plot_data()) == nrow(expected),
+              identical(plot_data()$value, expected$cases_7day))
+  }
+  session$setInputs(per_million = FALSE, dates = c(start, start))
+  stopifnot(nrow(plot_data()) == 2L,
+            isTRUE(all.equal(plot_data()$value,
+                             subset(covid_daily, date == start)$cases_7day *
+                               unname(covid_population[names(countries)]) / 1e6)))
+  session$setInputs(metric = covid_metrics[["Fully vaccinated (%)"]],
+                    freq = "daily", dates = as.Date(c("2022-01-01", "2022-01-31")), dist_type = "qq")
+  expected <- subset(covid_daily, date >= as.Date("2022-01-01") & date <= as.Date("2022-01-31") &
+                       is.finite(owid_people_fully_vaccinated_per_hundred))
+  stopifnot(identical(plot_data()$value, expected$owid_people_fully_vaccinated_per_hundred),
+            nrow(two_sample_q(plot_data())) == 99L,
+            startsWith(output$dist_plot$src, "data:image/png"))
+  session$setInputs(metric = covid_metrics[["Reproduction rate (R)"]])
+  stopifnot(nrow(plot_data()) > 2L, all(is.finite(plot_data()$value)))
 })
 cat(sprintf("All %d dashboard views rendered. All seven regional industries, geography, leads, transforms, forecasts, CSV downloads and the COVID-19 comparison section verified.\n", length(view_names)))
