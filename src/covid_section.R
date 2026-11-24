@@ -4,10 +4,6 @@
 # Depends on `countries` (src/analysis.R) and the colours and
 # `chart_theme` defined in src/plots.R, so source it after both.
 
-# Fixed 2021 denominators: Korea's projected population and Taiwan's year-end
-# registered population. These national definitions differ; see README sources.
-covid_population <- c(Korea = 51744876, Taiwan = 23375314)
-
 covid_daily_measures <- c(cases = "New cases per million (7-day average)",
                           deaths = "New deaths per million (7-day average)")
 covid_daily_views <- c(trend = "Daily trend and restriction stringency",
@@ -33,43 +29,6 @@ covid_events <- data.frame(
   label = c("Taiwan Level 3 alert", "Korea gradual recovery",
             "Korea distancing lifted", "Taiwan quarantine ends")
 )
-
-# Mean of the current day and the previous `days - 1` calendar days.
-# Windows follow dates, not rows, so a missing day cannot stretch a window.
-trailing_mean <- function(x, dates, days = 7L) {
-  full <- seq(min(dates), max(dates), by = "day")
-  v <- x[match(full, dates)]
-  out <- vapply(seq_along(full), function(i) {
-    if (i < days) return(NA_real_)
-    w <- v[(i - days + 1L):i]
-    if (any(!is.finite(w))) NA_real_ else mean(w)
-  }, numeric(1))
-  out[match(dates, full)]
-}
-
-read_covid_daily <- function(path = "data") {
-  d <- read.csv(file.path(path, "covid_daily.csv"), fileEncoding = "UTF-8-BOM")
-  d$date <- as.Date(d$date)
-  stopifnot(!anyNA(d$date), !anyDuplicated(d[c("country_code", "date")]),
-            setequal(d$country_code, names(countries)))
-  d$country <- unname(countries[d$country_code])
-  d <- d[order(d$country, d$date), ]
-  population <- unname(covid_population[d$country])
-  # Retain reporting corrections, consistently with the monthly joint analysis.
-  per_million <- function(x) x / population * 1e6
-  d$cases_pm <- per_million(d$jhu_new_confirmed)
-  d$deaths_pm <- per_million(d$jhu_new_deaths)
-  d$stringency <- d$owid_stringency_index
-  d <- do.call(rbind, lapply(split(d, d$country), function(g) {
-    g$cases_7day <- trailing_mean(g$cases_pm, g$date)
-    g$deaths_7day <- trailing_mean(g$deaths_pm, g$date)
-    g
-  }))
-  rownames(d) <- NULL
-  d[c("country", "date", "jhu_new_confirmed", "jhu_new_deaths",
-      "cases_pm", "deaths_pm", "cases_7day", "deaths_7day", "stringency")]
-}
-
 
 # ---- Plot helpers ----------------------------------------------------------
 
@@ -292,7 +251,11 @@ covid_section_server <- function(id, data) {
 
     output$download <- downloadHandler(
       filename = function() paste0("covid-daily-", input$dates[1], "-to-", input$dates[2], ".csv"),
-      content = function(file) write.csv(selected(), file, row.names = FALSE, na = "")
+      content = function(file) {
+        columns <- c("country", "date", "jhu_new_confirmed", "jhu_new_deaths",
+                     "cases_pm", "deaths_pm", "cases_7day", "deaths_7day", "stringency")
+        write.csv(selected()[columns], file, row.names = FALSE, na = "")
+      }
     )
   })
 }

@@ -1,26 +1,22 @@
 # COVID-19 and card spending: South Korea vs Taiwan
-# Tab code lives in R/ (COVID-19 timeline: R/tab_covid.R) and src/ (spending analysis).
 
 library(shiny)
 library(dplyr)
 library(ggplot2)
 library(readr)
 
-source("R/covid_data.R")
-source("R/tab_covid.R")
-
-covid_timeline_data <- load_covid_daily("data/covid_daily.csv")
-
 source("src/analysis.R", local = TRUE)
 source("src/plots.R", local = TRUE)
+source("src/covid_data.R", local = TRUE)
 source("src/covid_section.R", local = TRUE)
+source("src/covid_exploration.R", local = TRUE)
 source("src/card_section.R", local = TRUE)
 
 industry <- read_industry_crosswalk()
 categories <- setNames(industry$label_en, industry$category)
 spending <- read_spending(industry = industry)
-covid <- read_covid()
 covid_daily <- read_covid_daily()
+covid <- summarize_covid_monthly(covid_daily)
 age_profile <- read_age_profile(industry = industry)
 card_comparison <- read_card_comparison()
 
@@ -393,7 +389,7 @@ server <- function(input, output, session) {
     }
   )
 
-  covidTabServer("covid_timeline", covid_timeline_data)
+  covidTabServer("covid_timeline", covid_daily)
 }
 
 shinyApp(ui, server)

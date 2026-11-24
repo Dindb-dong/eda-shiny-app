@@ -1,39 +1,26 @@
-# =============================================================================
-# R/tab_covid.R  —  Tab 01 · COVID-19 Timeline (한국 vs 대만)
-#
-# Shiny "모듈" 구조:
-#   covidTabUI(id)                  -> 화면(위젯, 그림 자리)
-#   covidTabServer(id, covid_daily) -> 위젯 값을 받아 그림·표를 만듦
-# app.R에서 이 두 함수를 한 번씩 불러 쓰면 된다.
-# (covid_daily 는 R/covid_data.R 의 load_covid_daily() 결과)
-# 팀원 탭도 같은 방식(R/tab_spending.R 등)으로 만들면 서로 코드가 안 꼬인다.
-# =============================================================================
+# COVID-19 timeline, distribution and summary module.
 
-library(shiny)
-library(dplyr)
-library(ggplot2)
-
-# ---- 공통 설정 (다른 탭에서도 같은 색을 쓰면 발표 때 보기 좋음) --------------
-country_colors <- c("South Korea" = "#2E6FBA", "Taiwan" = "#D1495B")
+exploration_country_colors <- c(Korea = "#2E6FBA", Taiwan = "#D1495B")
 
 covid_metrics <- c(
   "New cases"                          = "new_cases",
   "New deaths"                         = "new_deaths",
   "Stringency Index (0-100)"           = "stringency",
-  "At least one dose (% of population)" = "vax_one",
-  "Fully vaccinated (% of population)" = "vax_full",
-  "Booster doses per 100 people"       = "boosters",
-  "Reproduction rate (R)"              = "reproduction_rate"
+  "At least one dose (% of population)" = "owid_people_vaccinated_per_hundred",
+  "Fully vaccinated (% of population)" = "owid_people_fully_vaccinated_per_hundred",
+  "Booster doses per 100 people"       = "owid_total_boosters_per_hundred",
+  "Reproduction rate (R)"              = "owid_reproduction_rate"
 )
-count_metrics <- c("new_cases", "new_deaths")   # 합계를 내는 변수
+count_metrics <- c(new_cases = "jhu_new_confirmed", new_deaths = "jhu_new_deaths")
+rate_metrics <- c(new_cases = "cases_pm", new_deaths = "deaths_pm")
 
 # 두 나라의 같은 분위수끼리 짝짓기 (two-sample Q-Q, Tukey mean-difference용)
 two_sample_q <- function(d, probs = seq(0.01, 0.99, by = 0.01)) {
-  validate(need(all(c("South Korea", "Taiwan") %in% d$country),
+  validate(need(all(c("Korea", "Taiwan") %in% d$country),
                 "Select both countries to compare quantiles."))
   data.frame(
     p  = probs,
-    kr = quantile(d$value[d$country == "South Korea"], probs, names = FALSE),
+    kr = quantile(d$value[d$country == "Korea"], probs, names = FALSE),
     tw = quantile(d$value[d$country == "Taiwan"],      probs, names = FALSE)
   )
 }
@@ -46,8 +33,8 @@ covidTabUI <- function(id) {
     sidebarPanel(
       width = 3,
       checkboxGroupInput(ns("countries"), "Country",
-                         choices  = names(country_colors),
-                         selected = names(country_colors)),
+                         choices  = names(exploration_country_colors),
+                         selected = names(exploration_country_colors)),
       selectInput(ns("metric"), "Variable", choices = covid_metrics),
       checkboxInput(ns("per_million"),
                     "Per million people (cases and deaths)", value = TRUE),
@@ -66,7 +53,7 @@ covidTabUI <- function(id) {
         "Stringency Index: Oxford COVID-19 Government Response Tracker, via Our World in Data.",
         "Vaccination: Our World in Data. R: TrackingR, via Our World in Data.",
         "Daily counts are differences of cumulative totals; reporting corrections are retained.",
-        "Per-million values adjust for South Korea's population being about twice Taiwan's."
+        "Per-million values adjust for Korea's population being about twice Taiwan's."
       )
     ),
 
@@ -117,7 +104,7 @@ covidTabServer <- function(id, covid_daily) {
     # 축 이름: 선택한 옵션에 맞게 자동으로 바뀜
     metric_label <- reactive({
       lab <- names(covid_metrics)[covid_metrics == input$metric]
-      is_count <- input$metric %in% count_metrics
+      is_count <- input$metric %in% names(count_metrics)
       if (is_count && input$per_million) lab <- paste(lab, "per million")
       if (input$freq == "ma7") lab <- paste(lab, "(7-day avg)")
       if (input$freq == "monthly") {
@@ -130,24 +117,32 @@ covidTabServer <- function(id, covid_daily) {
     # 위젯 값에 따라 걸러지고 변환된 자료: country, date, value
     plot_data <- reactive({
       validate(need(length(input$countries) > 0, "Select at least one country."))
-      req(input$dates)
+      dates <- input$dates
+      validate(
+        need(length(dates) == 2 && !anyNA(dates), "Choose a start and an end date."),
+        need(dates[1] <= dates[2], "The start date must be on or before the end date."))
 
       var <- input$metric
-      if (var %in% count_metrics && input$per_million) var <- paste0(var, "_pm")
+      is_count <- var %in% names(count_metrics)
+      if (is_count) var <- if (input$per_million) rate_metrics[[var]] else count_metrics[[var]]
+
+      precomputed <- input$freq == "ma7" && is_count && isTRUE(input$per_million)
+      if (precomputed) var <- sub("_pm$", "_7day", var)
 
       d <- covid_daily |>
-        filter(country %in% input$countries,
-               date >= input$dates[1], date <= input$dates[2]) |>
-        transmute(country, date, value = .data[[var]]) |>
-        arrange(country, date)
+        filter(country %in% input$countries) |>
+        transmute(country, date, value = .data[[var]])
 
-      if (input$freq == "ma7") {
+      if (input$freq == "ma7" && !precomputed) {
         d <- d |>
           group_by(country) |>
-          mutate(value = as.numeric(stats::filter(value, rep(1 / 7, 7), sides = 1))) |>
+          mutate(value = trailing_mean(value, date)) |>
           ungroup()
-      } else if (input$freq == "monthly") {
-        agg <- if (input$metric %in% count_metrics) {
+      }
+      d <- d |> filter(date >= dates[1], date <= dates[2])
+
+      if (input$freq == "monthly") {
+        agg <- if (is_count) {
           function(x) sum(x, na.rm = TRUE)
         } else {
           function(x) mean(x, na.rm = TRUE)
@@ -170,7 +165,7 @@ covidTabServer <- function(id, covid_daily) {
 
       p <- ggplot(d, aes(date, value, colour = country)) +
         geom_line(linewidth = 0.7) +
-        scale_colour_manual(values = country_colors) +
+        scale_colour_manual(values = exploration_country_colors) +
         scale_x_date(date_breaks = "3 months", date_labels = "%Y-%m") +
         labs(x = NULL, y = metric_label(), colour = NULL) +
         theme_minimal(base_size = 14) +
@@ -197,20 +192,20 @@ covidTabServer <- function(id, covid_daily) {
           geom_density(aes(colour = country), fill = NA, linewidth = 0.8) +
           geom_rug(aes(colour = country), alpha = 0.4) +
           facet_wrap(~ country, ncol = 1) +
-          scale_fill_manual(values = country_colors) +
-          scale_colour_manual(values = country_colors) +
+          scale_fill_manual(values = exploration_country_colors) +
+          scale_colour_manual(values = exploration_country_colors) +
           labs(x = lab, y = "Density") +
           base + theme(legend.position = "none"),
 
         box = ggplot(d, aes(country, value, fill = country)) +
           geom_boxplot(alpha = 0.6) +
-          scale_fill_manual(values = country_colors) +
+          scale_fill_manual(values = exploration_country_colors) +
           labs(x = NULL, y = lab) +
           base + theme(legend.position = "none"),
 
         ecdf = ggplot(d, aes(value, colour = country)) +
           stat_ecdf(linewidth = 0.8) +
-          scale_colour_manual(values = country_colors) +
+          scale_colour_manual(values = exploration_country_colors) +
           labs(x = lab, y = "Cumulative proportion", colour = NULL) +
           base + theme(legend.position = "top"),
 
@@ -219,7 +214,7 @@ covidTabServer <- function(id, covid_daily) {
           ggplot(qd, aes(kr, tw)) +
             geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "grey50") +
             geom_point(colour = "grey20") +
-            labs(x = paste("South Korea quantiles:", lab),
+            labs(x = paste("Korea quantiles:", lab),
                  y = paste("Taiwan quantiles:", lab)) +
             base
         },
@@ -230,7 +225,7 @@ covidTabServer <- function(id, covid_daily) {
             geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
             geom_point(colour = "grey20") +
             labs(x = "Mean of paired quantiles",
-                 y = "Taiwan minus South Korea") +
+                 y = "Taiwan minus Korea") +
             base
         }
       )

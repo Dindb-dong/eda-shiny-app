@@ -104,27 +104,6 @@ industry_months <- function(spending, selected_countries, period, view) {
   matched
 }
 
-read_covid <- function(path = "data") {
-  d <- read.csv(file.path(path, "covid_daily.csv"), fileEncoding = "UTF-8-BOM")
-  d$date <- as.Date(d$date)
-  stopifnot(!anyNA(d$date), !anyDuplicated(d[c("country_code", "date")]),
-            setequal(d$country_code, names(countries)))
-  d$country <- unname(countries[d$country_code])
-  d$month_id <- month_id(d$date)
-  d <- lapply(split(d, list(d$country, d$month_id), drop = TRUE), function(g) {
-    first <- as.Date(format(g$date[1], "%Y-%m-01"))
-    expected <- as.integer(seq(first, by = "month", length.out = 2)[2] - first)
-    daily <- function(x, statistic) {
-      if (length(x) != expected || any(!is.finite(x))) return(NA_real_)
-      statistic(x)
-    }
-    data.frame(country = g$country[1], month_id = g$month_id[1], covid_date = first,
-               cases = daily(g$jhu_new_confirmed, sum), deaths = daily(g$jhu_new_deaths, sum),
-               stringency = daily(g$owid_stringency_index, mean))
-  })
-  do.call(rbind, d)
-}
-
 by_series <- function(data, fn, keys = "panel") {
   groups <- split(data, data[keys], drop = TRUE)
   do.call(rbind, lapply(groups, function(g) fn(g[order(g$date), , drop = FALSE])))
