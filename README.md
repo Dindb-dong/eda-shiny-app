@@ -32,7 +32,7 @@ Run `Rscript tests/check-app.R` from the same directory to render the documented
 
 ## Dashboard Tour
 
-Select **COVID-19 comparison** in the left navigation to compare daily cases, deaths, and restriction stringency in Korea and Taiwan. It shows 7-day averages per million residents above the daily Stringency Index, with optional policy-date markers, a same-day scatter against stringency, a summary by country, and a CSV download.
+Select **COVID-19 comparison** in the left navigation to compare daily cases, deaths, and restriction stringency in Korea and Taiwan. It shows 7-day averages per million residents above the daily Stringency Index, with optional policy-date markers, a same-day scatter against stringency, a summary by country, and a CSV download. Open **Explore metrics** in the same section for vaccination coverage, the reproduction rate, raw counts, and distribution plots.
 
 Both COVID-19 views and the monthly spending analysis use the same daily source, `data/covid_daily.csv`. COVID-19 rates use fixed 2021 denominators: Korea's projected population of 51,744,876 ([Statistics Korea population table](https://mods.go.kr/boardDownload.es?bid=5110&list_no=420972&seq=1)) and Taiwan's year-end registered population of 23,375,314 ([Ministry of the Interior](https://www.ris.gov.tw/info-liferay/app/channel/newsEnglishDetail/22010345)). These national population definitions differ and are held constant across 2021–2022. Seven-day means require all seven calendar days, and negative reporting corrections are retained in both daily rates and monthly totals. A selected-period total is unavailable if any daily report is missing.
 

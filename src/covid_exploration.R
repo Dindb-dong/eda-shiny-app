@@ -1,13 +1,11 @@
 # COVID-19 timeline, distribution and summary module.
 
-exploration_country_colors <- c(Korea = "#2E6FBA", Taiwan = "#D1495B")
-
 covid_metrics <- c(
   "New cases"                          = "new_cases",
   "New deaths"                         = "new_deaths",
   "Stringency Index (0-100)"           = "stringency",
-  "At least one dose (% of population)" = "owid_people_vaccinated_per_hundred",
-  "Fully vaccinated (% of population)" = "owid_people_fully_vaccinated_per_hundred",
+  "At least one dose (%)" = "owid_people_vaccinated_per_hundred",
+  "Fully vaccinated (%)" = "owid_people_fully_vaccinated_per_hundred",
   "Booster doses per 100 people"       = "owid_total_boosters_per_hundred",
   "Reproduction rate (R)"              = "owid_reproduction_rate"
 )
@@ -29,71 +27,48 @@ two_sample_q <- function(d, probs = seq(0.01, 0.99, by = 0.01)) {
 covidTabUI <- function(id) {
   ns <- NS(id)   # 모듈 안의 inputId가 다른 탭과 겹치지 않게 해 줌
 
-  sidebarLayout(
-    sidebarPanel(
-      width = 3,
+  tagList(
+    tags$div(class = "filter-grid main-filters covid-filters",
       checkboxGroupInput(ns("countries"), "Country",
-                         choices  = names(exploration_country_colors),
-                         selected = names(exploration_country_colors)),
-      selectInput(ns("metric"), "Variable", choices = covid_metrics),
-      checkboxInput(ns("per_million"),
-                    "Per million people (cases and deaths)", value = TRUE),
-      radioButtons(ns("freq"), "Time resolution",
-                   choices = c("Daily" = "daily",
-                               "7-day average" = "ma7",
-                               "Monthly" = "monthly"),
-                   selected = "ma7"),
-      dateRangeInput(ns("dates"), "Period",
-                     start = "2021-01-01", end = "2022-12-31",
-                     min   = "2021-01-01", max = "2022-12-31"),
+                         choices = unname(countries), selected = unname(countries), inline = TRUE),
+      selectInput(ns("metric"), "Variable", choices = covid_metrics,
+                  selected = covid_metrics[["Fully vaccinated (%)"]], selectize = FALSE),
+      selectInput(ns("freq"), "Time resolution",
+                  choices = c("Daily" = "daily", "7-day average" = "ma7", "Monthly" = "monthly"),
+                  selectize = FALSE),
+      htmltools::tagAppendAttributes(
+        dateRangeInput(ns("dates"), "Period", start = "2021-01-01", end = "2022-12-31",
+                       min = "2021-01-01", max = "2022-12-31"),
+        class = "covid-date-range")),
+    tags$div(class = "filter-grid analysis-options",
+      conditionalPanel("['new_cases', 'new_deaths'].includes(input.metric)", ns = ns,
+        checkboxInput(ns("per_million"), "Per million people", value = TRUE)),
       checkboxInput(ns("log"), "Log scale: log10(x + 1)", value = FALSE),
-      checkboxInput(ns("facet"), "Separate panel for each country", value = FALSE),
-      helpText(
-        "Cases and deaths: Johns Hopkins University CSSE.",
-        "Stringency Index: Oxford COVID-19 Government Response Tracker, via Our World in Data.",
-        "Vaccination: Our World in Data. R: TrackingR, via Our World in Data.",
-        "Daily counts are differences of cumulative totals; reporting corrections are retained.",
-        "Per-million values adjust for Korea's population being about twice Taiwan's."
-      )
-    ),
-
-    mainPanel(
-      width = 9,
-      tabsetPanel(
-        tabPanel(
-          "Timeline",
-          plotOutput(ns("ts_plot"), height = "430px"),
-          helpText(
-            "When did each country's waves and restrictions rise and fall?",
-            "Use 'Separate panel' when the two countries' scales differ a lot,",
-            "and the 7-day average to remove day-of-week reporting patterns."
-          )
-        ),
-        tabPanel(
-          "Distribution",
+      checkboxInput(ns("facet"), "Separate panel for each country", value = FALSE)),
+    tabsetPanel(id = ns("view"),
+      tabPanel("Timeline",
+        plotOutput(ns("ts_plot"), height = "430px")),
+      tabPanel("Distribution",
+        tags$div(class = "filter-grid main-filters",
           selectInput(ns("dist_type"), "Plot type",
-                      choices = c("Histogram + density + rug"     = "hist",
-                                  "Boxplot"                       = "box",
-                                  "ECDF"                          = "ecdf",
-                                  "Two-sample Q-Q plot"           = "qq",
-                                  "Tukey mean-difference plot"    = "md")),
-          plotOutput(ns("dist_plot"), height = "430px"),
-          helpText(
-            "Q-Q: points on the dashed line mean the two distributions match;",
-            "a parallel shift means a level difference, a different slope means a spread difference.",
-            "Days are serially dependent, so read these plots descriptively."
-          )
-        ),
-        tabPanel(
-          "Summary",
-          tableOutput(ns("summary_tbl")),
-          helpText(
-            "Compare the mean and SD with the median and IQR:",
-            "a mean far above the median indicates a right-skewed series driven by a few large waves."
-          )
-        )
-      )
-    )
+                      choices = c("Histogram + density + rug" = "hist",
+                                  "Boxplot" = "box", "ECDF" = "ecdf",
+                                  "Two-sample Q-Q plot" = "qq", "Tukey mean-difference plot" = "md"),
+                      selectize = FALSE)),
+        plotOutput(ns("dist_plot"), height = "430px"),
+        tags$p(class = "chart-note",
+          "Q-Q: points on the dashed line indicate matching distributions. A parallel shift indicates a level difference; a different slope indicates a spread difference. Days are serially dependent, so read these plots descriptively.")),
+      tabPanel("Summary",
+        tags$div(class = "table-scroll", tabindex = "0", role = "region",
+                 "aria-label" = "Scrollable exploratory COVID-19 summary table",
+                 tableOutput(ns("summary_tbl"))),
+        tags$p(class = "chart-note",
+          "A mean much higher than the median indicates a right-skewed series driven by a few large observations."))),
+    tags$details(class = "methods",
+      tags$summary("Data and interpretation"),
+      tags$p("Vaccination data come from Our World in Data. The reproduction rate (R) is from TrackingR via Our World in Data."),
+      tags$p("Cases and deaths come from Johns Hopkins University CSSE. Daily counts retain reporting corrections. The Stringency Index is from the Oxford COVID-19 Government Response Tracker via Our World in Data."),
+      tags$p("Per-million rates use the same fixed 2021 populations as Cases and deaths. Seven-day averages use the current day and the previous six calendar days. Monthly counts sum the reports in the selected period. Other monthly measures average available days."))
   )
 }
 
@@ -163,15 +138,14 @@ covidTabServer <- function(id, covid_daily) {
       d <- plot_data()
       validate(need(nrow(d) > 0, "No data for this selection."))
 
-      p <- ggplot(d, aes(date, value, colour = country)) +
-        geom_line(linewidth = 0.7) +
-        scale_colour_manual(values = exploration_country_colors) +
-        scale_x_date(date_breaks = "3 months", date_labels = "%Y-%m") +
+      narrow <- session$clientData$output_ts_plot_width < 520
+      p <- ggplot(d, aes(date, value, colour = country, linetype = country)) +
+        covid_country_scales() + covid_date_axis(d$date, narrow = isTRUE(narrow)) +
         labs(x = NULL, y = metric_label(), colour = NULL) +
-        theme_minimal(base_size = 14) +
-        theme(legend.position = "top")
+        chart_theme + theme(legend.position = "top")
 
-      if (input$freq == "monthly") p <- p + geom_point(size = 2)
+      if (any(table(d$country) > 1L)) p <- p + geom_line(linewidth = 0.7)
+      if (input$freq == "monthly" || any(table(d$country) == 1L)) p <- p + geom_point(size = 2)
       if (input$facet) p <- p + facet_wrap(~ country, ncol = 1, scales = "free_y")
       p
     })
@@ -181,7 +155,7 @@ covidTabServer <- function(id, covid_daily) {
       d <- plot_data()
       validate(need(nrow(d) > 2, "Not enough observations for this selection."))
       lab  <- metric_label()
-      base <- theme_minimal(base_size = 14)
+      base <- chart_theme
 
       switch(
         input$dist_type,
@@ -192,20 +166,20 @@ covidTabServer <- function(id, covid_daily) {
           geom_density(aes(colour = country), fill = NA, linewidth = 0.8) +
           geom_rug(aes(colour = country), alpha = 0.4) +
           facet_wrap(~ country, ncol = 1) +
-          scale_fill_manual(values = exploration_country_colors) +
-          scale_colour_manual(values = exploration_country_colors) +
+          scale_fill_manual(values = covid_country_colors) +
+          scale_colour_manual(values = covid_country_colors) +
           labs(x = lab, y = "Density") +
           base + theme(legend.position = "none"),
 
         box = ggplot(d, aes(country, value, fill = country)) +
           geom_boxplot(alpha = 0.6) +
-          scale_fill_manual(values = exploration_country_colors) +
+          scale_fill_manual(values = covid_country_colors) +
           labs(x = NULL, y = lab) +
           base + theme(legend.position = "none"),
 
         ecdf = ggplot(d, aes(value, colour = country)) +
           stat_ecdf(linewidth = 0.8) +
-          scale_colour_manual(values = exploration_country_colors) +
+          scale_colour_manual(values = covid_country_colors) +
           labs(x = lab, y = "Cumulative proportion", colour = NULL) +
           base + theme(legend.position = "top"),
 

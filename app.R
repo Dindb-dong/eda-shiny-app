@@ -177,8 +177,10 @@ ui <- fluidPage(
       tags$h1("COVID-19 and card spending")),
     htmltools::tagAppendAttributes(
       navlistPanel(id = "section", selected = "joint", widths = c(3, 9), well = FALSE,
-        tabPanel("COVID-19 comparison", value = "covid", covid_section_ui("covid_daily")),
-        tabPanel("COVID-19 timeline", value = "covid_timeline", covidTabUI("covid_timeline")),
+        tabPanel("COVID-19 comparison", value = "covid",
+          tabsetPanel(id = "covid_views",
+            tabPanel("Cases and deaths", value = "reports", covid_section_ui("covid_daily")),
+            tabPanel("Explore metrics", value = "explore", covidTabUI("covid_timeline")))),
         tabPanel("Card spending comparison", value = "cards",
           card_section_ui("card_comparison", c(card_comparison$start, card_comparison$end))),
         tabPanel("COVID-19 ↔ Card spending", value = "joint", relationship_ui)

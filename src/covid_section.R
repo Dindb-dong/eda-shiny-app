@@ -167,8 +167,10 @@ covid_section_ui <- function(id) {
       selectInput(ns("view"), "View", covid_view_choices, selectize = FALSE),
       selectInput(ns("metric"), "COVID-19 measure (7-day average)", covid_measure_choices,
                   selectize = FALSE),
-      dateRangeInput(ns("dates"), "Dates", start = "2021-01-01", end = "2022-12-31",
-                     min = "2021-01-01", max = "2022-12-31", format = "d M yyyy")),
+      htmltools::tagAppendAttributes(
+        dateRangeInput(ns("dates"), "Dates", start = "2021-01-01", end = "2022-12-31",
+                       min = "2021-01-01", max = "2022-12-31"),
+        class = "covid-date-range")),
     tags$div(class = "filter-grid analysis-options",
       checkboxInput(ns("compressed"), "Compress large values (inverse hyperbolic sine scale)",
                     value = FALSE),

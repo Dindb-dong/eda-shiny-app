@@ -186,7 +186,7 @@ testServer(covidTabServer, args = list(covid_daily = read_covid_daily()), {
             isTRUE(all.equal(plot_data()$value,
                              subset(covid_daily, date == start)$cases_7day *
                                unname(covid_population[names(countries)]) / 1e6)))
-  session$setInputs(metric = covid_metrics[["Fully vaccinated (% of population)"]],
+  session$setInputs(metric = covid_metrics[["Fully vaccinated (%)"]],
                     freq = "daily", dates = as.Date(c("2022-01-01", "2022-01-31")), dist_type = "qq")
   expected <- subset(covid_daily, date >= as.Date("2022-01-01") & date <= as.Date("2022-01-31") &
                        is.finite(owid_people_fully_vaccinated_per_hundred))
