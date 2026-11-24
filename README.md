@@ -19,6 +19,10 @@
 
 The R Shiny dashboard joins each country's card spending to its own COVID-19 series. It covers seven spending categories and uses national COVID-19 measures for each selected card-spending area.
 
+## Live dashboard
+
+[Open the Shiny dashboard](https://dindb-dong.shinyapps.io/covid-card/).
+
 ## Run locally
 
 Run from the repository root with R installed.
