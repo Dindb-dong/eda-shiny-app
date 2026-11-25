@@ -76,6 +76,21 @@ stopifnot(sum(units$country == "Korea") == 17L, sum(units$country == "Taiwan") =
           zone_of("TW-TAO") == "non_capital", zone_of("KR-50") == "non_capital",
           length(map_months) == 36L,
           identical(format(seq(min(map_months), by = 31, length.out = 36), "%Y%m"), format(map_months, "%Y%m")))
+# Taiwan city/county spending: 22 units, reconciled to the area series by the loader.
+stopifnot(nrow(unit_spending) == 22L * 7L * 108L, length(unique(unit_spending$unit_code)) == 22L,
+          "TW-LIE" %in% unit_spending$unit_code, !"TW-LIE" %in% boundaries$unit_code,
+          setequal(setdiff(unit_spending$unit_code, "TW-LIE"), units$unit_code[units$country == "Taiwan"]),
+          all(is.na(unit_spending$yoy[unit_spending$month %in% 202102:202201])),
+          all(is.na(unit_spending$monthly[unit_spending$month == 202102])),
+          all(is.finite(unit_spending$yoy[unit_spending$month == 202202 & unit_spending$unit_code != "TW-LIE"])))
+# The February 2021 step happens at once in every city and county.
+feb_ratio <- function(industry) {
+  d <- subset(unit_spending, category == industry & month %in% c(202101, 202102))
+  w <- tapply(d$amount_local, list(d$unit_code, d$month), sum)
+  w[, "202102"] / w[, "202101"]
+}
+food_ratio <- feb_ratio("food"); retail_ratio <- feb_ratio("retail_broad")
+stopifnot(all(food_ratio < 1), sum(retail_ratio > 1) == 21L, names(which(retail_ratio <= 1)) == "TW-LIE")
 testServer(server, {
   session$setInputs(tab = "overview", country = "both", overview_view = "industry_map", category = "food",
                     overview_period = "since_covid_onset")
@@ -92,10 +107,20 @@ testServer(server, {
               grepl("<table", output$summary, fixed = TRUE), grepl("stringency", output$coverage, fixed = TRUE))
     csv <- read.csv(output$download)
     stopifnot(nrow(csv) == 4L, isTRUE(all.equal(csv$yoy_pct, v$yoy)))
+    # City and county fill for Taiwan; the zone rows stay in the table.
+    session$setInputs(map_fill = "unit")
+    u <- unit_values()
+    expected <- subset(unit_spending, category == "food" & month == target)
+    csv <- read.csv(output$download)
+    stopifnot(nrow(u) == 22L, identical(u$yoy, expected$yoy[match(u$unit_code, expected$unit_code)]),
+              nrow(csv) == 26L, sum(csv$level == "zone") == 4L, startsWith(output$chart$src, "data:image/png"),
+              grepl("City or county", output$summary, fixed = TRUE),
+              xor(grepl("range from", output$chart$alt, fixed = TRUE), target %in% 202102:202201))
+    session$setInputs(map_fill = "zone")
   }
   # June 2021 is inside Taiwan's masked window: both Taiwan zones are NA and say so.
-  session$setInputs(map_month = as.Date("2021-06-01"))
-  stopifnot(all(is.na(map_values()$yoy[map_values()$country == "Taiwan"])),
+  session$setInputs(map_month = as.Date("2021-06-01"), map_fill = "unit")
+  stopifnot(all(is.na(unit_values()$yoy)), all(is.na(map_values()$yoy[map_values()$country == "Taiwan"])),
             all(is.finite(map_values()$yoy[map_values()$country == "Korea"])),
             grepl("Taiwan capital area masked", output$chart$alt, fixed = TRUE))
   session$setInputs(map_month = as.Date("2020-01-01"), country = "Korea")

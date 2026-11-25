@@ -22,10 +22,11 @@ age_profile <- read_age_profile(industry = industry)
 card_comparison <- read_card_comparison()
 findings <- build_findings(spending, covid, categories)
 boundaries <- read_region_boundaries()
+unit_spending <- read_unit_spending(spending, industry = industry)
 map_months <- seq(as.Date("2020-01-01"), as.Date("2022-12-01"), by = "month")
 
 overview_views <- c(industry_growth = "Spending growth by area", industry_gap = "Capital–non-capital gap")
-map_views <- c(industry_map = "Capital vs non-capital map")
+map_views <- c(industry_map = "Regional spending map")
 relationship_views <- c(scatter = "Monthly scatter", aligned = "Aligned timeline",
                         lags = "Lag profile", adjusted = "Detrended and seasonally adjusted scatter",
                         conditioning = "Condition on restriction stringency",
@@ -67,7 +68,7 @@ spending_choices <- c("Year-over-year growth" = "yoy", "2019 index" = "index",
 
 chart_notes <- c(
   industry_growth = "Each cell shows spending growth from the same month a year earlier. Orange indicates a decline and teal indicates growth. Colours stop at ±50%; larger values share the end colour. Grey Taiwan cells (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021.",
-  industry_map = "Each zone is filled with spending growth from the same month a year earlier. The capital zone has a heavier outline. The colour scale is fixed at ±50% so months can be compared while the slider plays. Grey Taiwan zones (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021. Matsu (Lienchiang County, non-capital) is absent from the boundary source but included in the spending totals.",
+  industry_map = "Fill shows spending growth from the same month a year earlier: by city and county for Taiwan, and by capital and non-capital zone for Korea, whose provincial series are not yet in the app. Labels give the zone values and the capital zone has a heavier outline. The colour scale is fixed at ±50%, so months can be compared while the slider plays and small counties with wild swings share the end colour. Grey Taiwan areas (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021. Matsu (Lienchiang County, non-capital) has spending data but no boundary polygon.",
   industry_gap = "Each cell subtracts non-capital growth from capital-area growth in the same industry and month. Teal means growth was higher in the capital area. Colours stop at ±50 points. Grey Taiwan cells (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021.",
   scatter = "Each point is one spending month. The dashed line is linear. The purple line is a local linear fit (LOESS).",
   aligned = "Both series are standardized within their own paired window. The horizontal axis follows the spending month.",
@@ -123,7 +124,7 @@ relationship_ui <- tagList(
       conditionalPanel("input.tab === 'overview'",
         selectInput("overview_view", "View",
                     c("Growth by area" = "industry_growth", "Capital area gap" = "industry_gap",
-                      "Capital vs non-capital map" = "industry_map"),
+                      "Regional map" = "industry_map"),
                     selectize = FALSE)),
       conditionalPanel("input.tab === 'overview' && input.overview_view !== 'industry_map'",
         selectInput("overview_period", "Spending period",
@@ -132,6 +133,8 @@ relationship_ui <- tagList(
     tags$div(class = "filter-grid analysis-options",
       conditionalPanel("input.tab === 'overview' && input.overview_view === 'industry_map'", class = "sensitivity-option",
         # Date slider steps are in days; 31-day steps from 1 Jan 2020 land in each of the 36 months once.
+        selectInput("map_fill", "Map fill", c("Taiwan cities and counties, Korea zones" = "unit",
+                                              "Capital and non-capital zones" = "zone"), selectize = FALSE),
         sliderInput("map_month", "Month (press play to step through 2020–2022)", min = min(map_months),
                     max = max(map_months), value = as.Date("2020-03-01"), step = 31, timeFormat = "%b %Y",
                     ticks = FALSE, width = "100%", animate = animationOptions(interval = 1200))),
@@ -237,6 +240,33 @@ server <- function(input, output, session) {
     as.integer(month)
   })
   map_values <- reactive(zone_values(spending, covid, selected_countries(), req(input$category), map_month()))
+  unit_values <- reactive({
+    if (!identical(input$map_fill, "unit") || !"Taiwan" %in% selected_countries()) return(NULL)
+    unit_spending[unit_spending$category == req(input$category) & unit_spending$month == map_month(),
+                  c("country", "unit_code", "unit_name", "capital_area", "yoy")]
+  })
+  # Zone rows plus any city/county rows, for the summary table and CSV.
+  map_table <- reactive({
+    v <- map_values()
+    zones <- data.frame(level = "zone", country = v$country, area = v$region, unit_code = NA_character_,
+                        zone = v$capital_area, yoy_pct = v$yoy)
+    u <- unit_values()
+    units <- if (is.null(u)) zones[0, ] else
+      data.frame(level = "city_county", country = u$country, area = u$unit_name, unit_code = u$unit_code,
+                 zone = u$capital_area, yoy_pct = u$yoy)
+    d <- rbind(zones, units)
+    d$industry <- unname(categories[[req(input$category)]])
+    d$month <- map_month()
+    d$stringency <- v$stringency[match(d$country, v$country)]
+    d$cases_per_million <- v$cases_per_million[match(d$country, v$country)]
+    d
+  })
+  unit_extremes <- function(u) {
+    u <- u[is.finite(u$yoy), ]
+    if (is.null(u) || !nrow(u)) return("")
+    hi <- u[which.max(u$yoy), ]; lo <- u[which.min(u$yoy), ]
+    sprintf(". Taiwan cities and counties range from %s %+.1f%% to %s %+.1f%%", lo$unit_name, lo$yoy, hi$unit_name, hi$yoy)
+  }
   map_label <- function(month) format(as.Date(paste0(month, "01"), "%Y%m%d"), "%b %Y")
   overview_unit <- reactive(if (active_view() == "industry_gap") "Gap (percentage points)" else "Growth (%)")
 
@@ -344,7 +374,7 @@ server <- function(input, output, session) {
   output$chart <- renderPlot({
     columns <- layout()$columns
     view <- active_view()
-    if (view == "industry_map") return(zone_map(boundaries, map_values(), "Growth (%)"))
+    if (view == "industry_map") return(zone_map(boundaries, map_values(), "Growth (%)", unit_values()))
     if (view %in% names(overview_views)) return(industry_heatmap(overview_data(), categories, overview_unit(), columns))
     if (req(input$tab) == "age") return(age_plot(age_data(), view))
     if (view %in% forecast_views) return(forecast_plot(predicted(), view, columns))
@@ -362,7 +392,7 @@ server <- function(input, output, session) {
       return(paste0("Map of year-over-year ", tolower(categories[[input$category]]), " spending growth in ",
                     map_label(map_month()), " by zone: ",
                     paste(sprintf("%s %s %s", v$country, tolower(v$region), values), collapse = "; "),
-                    ". Values are also in the table below."))
+                    unit_extremes(unit_values()), ". Values are also in the table below."))
     }
     if (active_view() %in% names(overview_views)) {
       return(paste("Heatmap of", view_names[[active_view()]], "for",
@@ -378,10 +408,11 @@ server <- function(input, output, session) {
   output$summary <- renderTable({
     view <- active_view()
     if (view == "industry_map") {
-      v <- map_values()
-      return(data.frame(Country = v$country, Zone = v$region, Industry = unname(categories[v$category]),
-                        Month = map_label(v$month), "YoY growth (%)" = v$yoy, "Stringency (national)" = v$stringency,
-                        "Cases per million (national)" = v$cases_per_million, check.names = FALSE))
+      d <- map_table()
+      return(data.frame(Country = d$country, Level = ifelse(d$level == "zone", "Zone", "City or county"),
+                        Area = d$area, Industry = d$industry, Month = map_label(d$month), "YoY growth (%)" = d$yoy_pct,
+                        "Stringency (national)" = d$stringency, "Cases per million (national)" = d$cases_per_million,
+                        check.names = FALSE))
     }
     if (view %in% names(overview_views)) {
       d <- overview_data()
@@ -433,10 +464,7 @@ server <- function(input, output, session) {
     content = function(file) {
       view <- active_view()
       if (view == "industry_map") {
-        d <- map_values()
-        d$industry <- unname(categories[d$category])
-        names(d)[names(d) == "yoy"] <- "yoy_pct"
-        write.csv(d, file, row.names = FALSE, na = "")
+        write.csv(map_table(), file, row.names = FALSE, na = "")
         return(invisible(NULL))
       }
       if (view %in% names(overview_views)) {

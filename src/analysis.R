@@ -64,15 +64,23 @@ read_spending <- function(path = "data", industry = read_industry_crosswalk(path
   d$panel <- paste(d$country, d$region, sep = " · ")
 
   by_series(d, function(g) {
+    stopifnot(all(g$amount_local > 0))
+    add_measures(g)
+  }, keys = c("country", "category", "capital_area"))
+}
+
+# Spending measures for one monthly series (Jan 2014 – Dec 2022), shared by the
+# area series and the Taiwan city/county series so both get the same mask.
+add_measures <- function(g) {
     stopifnot(identical(g$date, seq(as.Date("2014-01-01"), as.Date("2022-12-01"), by = "month")),
-              all(g$amount_local > 0),
               length(unique(g$currency)) == 1L)
-    amount <- g$amount_local
+    # Small units can have zero or net-negative (refund) months; no ratio is defined there.
+    amount <- ifelse(g$amount_local > 0, g$amount_local, NA_real_)
     year_ago <- amount[match(g$month_id - 12L, g$month_id)]
     last_month <- amount[match(g$month_id - 1L, g$month_id)]
     pre <- subset(g, date < onset)
-    median_by_month <- tapply(pre$amount_local, pre$season, median)
-    g$index <- 100 * amount / mean(amount[g$month %/% 100 == 2019])
+    median_by_month <- tapply(amount[g$date < onset], pre$season, median, na.rm = TRUE)
+    g$index <- 100 * amount / mean(amount[g$month %/% 100 == 2019], na.rm = TRUE)
     g$yoy <- 100 * (amount / year_ago - 1)
     g$seasonal <- 100 * (log(amount) - log(year_ago))
     g$monthly <- 100 * (amount / last_month - 1)
@@ -89,8 +97,11 @@ read_spending <- function(path = "data", industry = read_industry_crosswalk(path
       g$monthly[g$month == 202102] <- NA
       g$double_diff <- g$seasonal - g$seasonal[match(g$month_id - 1L, g$month_id)]
     }
+    # A zero month in a small unit gives an infinite or undefined change; leave it missing.
+    for (measure in c("index", "yoy", "seasonal", "monthly", "double_diff", "gap")) {
+      g[[measure]][!is.finite(g[[measure]])] <- NA
+    }
     g
-  }, keys = c("country", "category", "capital_area"))
 }
 
 industry_months <- function(spending, selected_countries, period, view) {
@@ -304,6 +315,28 @@ read_region_boundaries <- function(path = "data") {
                                                             capital[[k]]), logical(1))),
             all(units$zone %in% c("capital", "non_capital")), all(is.finite(d$lon) & is.finite(d$lat)))
   d[order(d$piece, d$order), ]
+}
+
+# Taiwan's 22 cities and counties from NCCC C02 (README.md). Unit totals must
+# reproduce the national, capital and non-capital series exactly.
+taiwan_capital_units <- c("TW-TPE", "TW-TPQ", "TW-KEE")
+read_unit_spending <- function(spending, path = "data", industry = read_industry_crosswalk(path)) {
+  d <- read.csv(file.path(path, "card_spending_by_city_county_taiwan_2014_2022.csv"), fileEncoding = "UTF-8-BOM")
+  stopifnot(!anyDuplicated(d[c("month", "category", "unit_code")]), length(unique(d$unit_code)) == 22L,
+            setequal(d$category, industry$category), all(table(d$unit_code, d$category) == 108L),
+            all(is.finite(d$amount_local)), all(d$currency == "TWD"))
+  d$capital_area <- ifelse(d$unit_code %in% taiwan_capital_units, "capital", "non_capital")
+  for (zone in c("national", "capital", "non_capital")) {
+    units <- if (zone == "national") d else d[d$capital_area == zone, ]
+    total <- aggregate(amount_local ~ month + category, units, sum)
+    series <- spending[spending$country == "Taiwan" & spending$capital_area == zone, ]
+    matched <- merge(total, series[c("month", "category", "amount_local")], by = c("month", "category"))
+    stopifnot(nrow(matched) == 108L * 7L, all(matched$amount_local.x == matched$amount_local.y))
+  }
+  d$date <- as.Date(paste0(d$month, "01"), "%Y%m%d")
+  d$month_id <- month_id(d$date)
+  d$season <- as.integer(format(d$date, "%m"))
+  by_series(d, add_measures, keys = c("category", "unit_code"))
 }
 
 # One row per country and zone: year-over-year growth for the chosen industry and month,
