@@ -1,8 +1,14 @@
 source("app.R")
 
-stopifnot(length(categories) == 7L, nrow(spending) == 4536L, nrow(covid) == 48L,
+stopifnot(length(categories) == 7L, nrow(spending) == 4536L, nrow(covid) == 72L,
           all(table(spending$country, spending$category, spending$capital_area) == 108L),
           all(table(age_profile$category) == 576L))
+# JHU reports start on 22 January 2020: January 2020 keeps stringency but no case or death totals.
+jan_covid <- subset(covid, covid_date == as.Date("2020-01-01"))
+stopifnot(nrow(jan_covid) == 2L, all(is.na(jan_covid$cases)), all(is.na(jan_covid$deaths)),
+          all(is.finite(jan_covid$stringency)),
+          all(is.finite(subset(covid, covid_date > as.Date("2020-01-01"))$cases)),
+          all(is.finite(covid$stringency)))
 korea <- subset(spending, country == "Korea" & capital_area == "national" & category == "food")
 stopifnot(sum(is.na(korea$seasonal)) == 12L, sum(is.na(korea$monthly)) == 1L,
           isTRUE(all.equal(mean(korea$index[korea$month %/% 100 == 2019]), 100)))
@@ -58,13 +64,13 @@ testServer(server, {
               grepl("<table", output$summary, fixed = TRUE))
   }
   d <- paired()
-  stopifnot(identical(sort(as.integer(table(d$panel))), rep(24L, 4)),
+  stopifnot(identical(sort(as.integer(table(d$panel))), rep(36L, 4)),
             all(d$month_id == month_id(d$covid_date)),
             all(d$stringency == covid$stringency[match(paste(d$country, d$covid_date),
                                                        paste(covid$country, covid$covid_date))]))
   session$setInputs(lead = "1", omit_feb = TRUE)
   d <- paired()
-  stopifnot(identical(as.integer(table(d$panel)), c(23L, 23L, 22L, 22L)),
+  stopifnot(identical(as.integer(table(d$panel)), c(35L, 35L, 34L, 34L)),
             all(d$month_id - month_id(d$covid_date) == 1),
             !any(d$country == "Taiwan" & d$month == 202102))
   for (view in names(relationship_views)) {
@@ -100,11 +106,11 @@ testServer(server, {
             all(is.finite(age_data()$robust)))
   session$setInputs(tab = "relationship", relationship_view = "scatter", country = "Taiwan",
                     area = "capital", metric = "cases", category = "apparel")
-  stopifnot(nrow(paired()) == 22L, all(paired()$country == "Taiwan"),
+  stopifnot(nrow(paired()) == 33L, all(paired()$country == "Taiwan"),
             all(paired()$capital_area == "capital"), all(paired()$category == "apparel"))
   assert_chart()
   downloaded <- read.csv(output$download)
-  stopifnot(nrow(downloaded) == 22L, all(downloaded$covid_measure == "cases"),
+  stopifnot(nrow(downloaded) == 33L, all(downloaded$covid_measure == "cases"),
             identical(downloaded$month, paired()$month))
   session$setInputs(country = "both", area = "both", metric = "stringency",
                     lead = "0", omit_feb = FALSE, age_view = "age_observed")
@@ -116,20 +122,25 @@ testServer(server, {
   session$setInputs(country = "both", area = "both")
   for (category in setdiff(names(categories), c("food", "apparel"))) {
     session$setInputs(tab = "relationship", category = category)
-    stopifnot(all(paired()$category == category), all(table(paired()$panel) == 24L),
+    stopifnot(all(paired()$category == category), all(table(paired()$panel) == 36L),
               length(unique(paired()$panel)) == 4L)
     assert_chart()
     downloaded <- read.csv(output$download)
-    stopifnot(nrow(downloaded) == 96L, all(downloaded$category == category))
+    stopifnot(nrow(downloaded) == 144L, all(downloaded$category == category))
     session$setInputs(tab = "age")
     stopifnot(nrow(age_data()) == 576L, all(age_data()$category == category))
     assert_chart()
   }
 })
 # COVID-19 comparison section (daily module).
-stopifnot(nrow(covid_daily) == 1460L, all(covid_daily$cases_pm >= 0, na.rm = TRUE),
+# The only negative daily counts are two JHU corrections for Taiwan (3 and 9 Aug 2020).
+negative <- which(covid_daily$cases_pm < 0)
+stopifnot(nrow(covid_daily) == 2192L, all(covid_daily$country[negative] == "Taiwan"),
+          setequal(covid_daily$date[negative], as.Date(c("2020-08-03", "2020-08-09"))),
           all(covid_daily$cases_7day >= 0, na.rm = TRUE),
-          sum(is.na(covid_daily$cases_7day[covid_daily$date < as.Date("2021-01-07")])) == 12L)
+          all(is.na(covid_daily$cases_7day[covid_daily$date < as.Date("2020-01-29")])),
+          !anyNA(covid_daily$cases_7day[covid_daily$date >= as.Date("2020-01-29")]),
+          !anyNA(covid_daily$stringency))
 korea_daily <- subset(covid_daily, country == "Korea")
 day <- which(korea_daily$date == as.Date("2021-03-01"))
 stopifnot(isTRUE(all.equal(korea_daily$cases_7day[day], mean(korea_daily$cases_pm[(day - 6):day], na.rm = TRUE))))
@@ -148,7 +159,7 @@ local({
   raw$jhu_new_confirmed[corrected] <- -100
   write.csv(raw, file.path(fixture, "covid_daily.csv"), row.names = FALSE)
   daily <- read_covid_daily(fixture)
-  january <- subset(daily, country == "Korea" & date < as.Date("2021-02-01"))
+  january <- subset(daily, country == "Korea" & format(date, "%Y-%m") == "2021-01")
   monthly <- subset(summarize_covid_monthly(daily), country == "Korea" & covid_date == as.Date("2021-01-01"))
   stopifnot(january$cases_pm[7] < 0,
             isTRUE(all.equal(sum(january$cases_pm), monthly$cases / covid_population[["KOR"]] * 1e6)))

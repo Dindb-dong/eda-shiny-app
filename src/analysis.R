@@ -127,7 +127,7 @@ safe_correlation <- function(x, y, method = "spearman") {
 }
 
 adjust_association <- function(g) {
-  # One annual harmonic and a linear trend leave degrees of freedom in a 24-month window.
+  # One annual harmonic and a linear trend leave degrees of freedom in a 24–36 month window.
   g$sin_month <- sin(2 * pi * g$season / 12)
   g$cos_month <- cos(2 * pi * g$season / 12)
   g$x_adjusted <- residuals(lm(x ~ month_id + sin_month + cos_month, data = g))

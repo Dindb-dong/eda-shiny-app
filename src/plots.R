@@ -5,7 +5,7 @@ orange <- "#b95013"
 teal <- "#087d70"
 purple <- "#7441b4"
 neutral <- "#f7f5ee"
-year_colors <- c("2021" = blue, "2022" = orange)
+year_colors <- c("2020" = purple, "2021" = blue, "2022" = orange)
 period_colors <- c("Before onset" = blue, "Since onset" = orange)
 
 chart_theme <- theme_minimal(base_size = 13) +
@@ -131,6 +131,7 @@ relationship_plot <- function(paired, spending, covid, view, metric, measure, om
   }
   p + geom_point(aes(colour = year, shape = year), size = 2.8, alpha = .9) +
     scale_colour_manual(values = year_colors) +
+    scale_shape_manual(values = c("2020" = 15, "2021" = 16, "2022" = 17)) +
     labs(x = x_label, y = y_label, colour = "Spending year", shape = "Spending year") +
     grid + chart_theme
 }

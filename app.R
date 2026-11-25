@@ -154,7 +154,7 @@ relationship_ui <- tagList(
     tags$p("The nationwide spending totals include unassigned amounts. Capital and non-capital series exclude them. Korea uses Seoul, Incheon, and Gyeonggi. Taiwan uses Taipei, New Taipei, and Keelung."),
     tags$p("Spending amounts are nominal and source coverage varies by country and category. The 2019 index uses each series’ own 2019 average. The same-month median uses 2014–2019. Growth and differences are calculated before filtering by period."),
     tags$p("Industry categories use each source’s definitions. Lodging, vehicles and source-defined Other are best read within each country. National COVID-19 measures are shared by both spending areas."),
-    tags$p("The joined series has at most 24 months per country and region. Shared trends, extreme months, and serial dependence can drive the fitted patterns. These charts describe associations."))
+    tags$p("The joined series has at most 36 months (January 2020 – December 2022) per country and region; January 2020 has stringency but no complete case or death counts. Shared trends, extreme months, and serial dependence can drive the fitted patterns. These charts describe associations."))
 )
 
 ui <- fluidPage(
@@ -289,7 +289,9 @@ server <- function(input, output, session) {
     if (view == "forecast") return("Jan 2020 – Dec 2022 · Forecast gaps describe departures from the reference models.")
     if (uses_pairs()) {
       if (view == "lags") return("Summary and download below use the same-month pairs.")
-      return("Paired monthly data, 2021–2022. COVID-19 measures are national.")
+      d <- paired()
+      return(paste("Paired monthly data,", format(min(d$date), "%b %Y"), "–", format(max(d$date), "%b %Y"),
+                   "· COVID-19 measures are national."))
     }
     d <- shown_spending()
     paste(format(min(d$date), "%b %Y"), "–", format(max(d$date), "%b %Y"), "· Monthly card spending")

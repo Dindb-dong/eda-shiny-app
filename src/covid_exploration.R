@@ -37,8 +37,8 @@ covidTabUI <- function(id) {
                   choices = c("Daily" = "daily", "7-day average" = "ma7", "Monthly" = "monthly"),
                   selectize = FALSE),
       htmltools::tagAppendAttributes(
-        dateRangeInput(ns("dates"), "Period", start = "2021-01-01", end = "2022-12-31",
-                       min = "2021-01-01", max = "2022-12-31"),
+        dateRangeInput(ns("dates"), "Period", start = "2020-01-01", end = "2022-12-31",
+                       min = "2020-01-01", max = "2022-12-31"),
         class = "covid-date-range")),
     tags$div(class = "filter-grid analysis-options",
       conditionalPanel("['new_cases', 'new_deaths'].includes(input.metric)", ns = ns,
@@ -68,7 +68,7 @@ covidTabUI <- function(id) {
       tags$summary("Data and interpretation"),
       tags$p("Vaccination data come from Our World in Data. The reproduction rate (R) is from TrackingR via Our World in Data."),
       tags$p("Cases and deaths come from Johns Hopkins University CSSE. Daily counts retain reporting corrections. The Stringency Index is from the Oxford COVID-19 Government Response Tracker via Our World in Data."),
-      tags$p("Per-million rates use the same fixed 2021 populations as Cases and deaths. Seven-day averages use the current day and the previous six calendar days. Monthly counts sum the reports in the selected period. Other monthly measures average available days."))
+      tags$p("Per-million rates use the same fixed 2021 populations as Cases and deaths. Seven-day averages use the current day and the previous six calendar days. Monthly counts sum the reports in the selected period. Other monthly measures average available days. Cases and deaths start on 23 January 2020 and vaccination measures start in 2021."))
   )
 }
 
