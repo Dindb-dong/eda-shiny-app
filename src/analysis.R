@@ -290,3 +290,31 @@ smooth_age_profile <- function(d) {
   d$residual <- 100 * log(d$observed / d$robust)
   d
 }
+
+# Natural Earth admin-1 units tagged with the two card-spending zones (README.md).
+# Matsu (Lienchiang County, non-capital) is absent from Natural Earth, so Taiwan has
+# 21 drawn units although its spending totals include all 22.
+read_region_boundaries <- function(path = "data") {
+  d <- read.csv(file.path(path, "region_boundaries.csv"), fileEncoding = "UTF-8-BOM")
+  units <- unique(d[c("country", "unit_code", "zone")])
+  capital <- list(Korea = c("KR-11", "KR-28", "KR-41"), Taiwan = c("TW-TPE", "TW-TPQ", "TW-KEE"))
+  stopifnot(!anyDuplicated(units$unit_code), sum(units$country == "Korea") == 17L,
+            sum(units$country == "Taiwan") == 21L, !"TW-LIE" %in% units$unit_code,
+            all(vapply(names(capital), function(k) setequal(units$unit_code[units$country == k & units$zone == "capital"],
+                                                            capital[[k]]), logical(1))),
+            all(units$zone %in% c("capital", "non_capital")), all(is.finite(d$lon) & is.finite(d$lat)))
+  d[order(d$piece, d$order), ]
+}
+
+# One row per country and zone: year-over-year growth for the chosen industry and month,
+# with that month's national COVID-19 context.
+zone_values <- function(spending, covid, selected_countries, category, month) {
+  d <- spending[spending$country %in% selected_countries & spending$category == category &
+                  spending$month == month & spending$capital_area %in% c("capital", "non_capital"),
+                c("country", "category", "month", "capital_area", "region", "yoy")]
+  context <- covid[covid$month_id == month_id(as.Date(paste0(month, "01"), "%Y%m%d")), ]
+  d$stringency <- context$stringency[match(d$country, context$country)]
+  population <- c(Korea = covid_population[["KOR"]], Taiwan = covid_population[["TWN"]])
+  d$cases_per_million <- context$cases[match(d$country, context$country)] / population[d$country] * 1e6
+  d[order(d$country, d$capital_area), ]
+}

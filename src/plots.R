@@ -309,3 +309,51 @@ age_plot <- function(d, view) {
     facet_wrap(vars(series), ncol = 1) +
     labs(x = NULL, y = "Age-band midpoint") + chart_theme
 }
+
+# Two-zone choropleth. Each country is projected around its own centre
+# (equirectangular, x scaled by cos(latitude)) and Taiwan is placed left of Korea at the
+# same scale, so one panel and one legend serve both without free-scale facets.
+zone_map <- function(boundaries, values, unit) {
+  b <- boundaries[boundaries$country %in% values$country, ]
+  b <- do.call(rbind, lapply(split(b, b$country), function(g) {
+    centre <- c(mean(range(g$lon)), mean(range(g$lat)))
+    g$x <- (g$lon - centre[1]) * cos(centre[2] * pi / 180)
+    g$y <- g$lat - centre[2]
+    g
+  }))
+  if (all(c("Korea", "Taiwan") %in% b$country)) {
+    taiwan <- b$country == "Taiwan"
+    b$x[taiwan] <- b$x[taiwan] - max(b$x[taiwan]) + min(b$x[!taiwan]) - .6
+  }
+  b$value <- values$yoy[match(paste(b$country, b$zone), paste(values$country, values$capital_area))]
+  labels <- do.call(rbind, lapply(split(b, list(b$country, b$zone), drop = TRUE), function(g) {
+    v <- g$value[1]
+    text <- paste0(if (g$zone[1] == "capital") "Capital area" else "Non-capital area", "\n",
+                   if (is.finite(v)) sprintf("%+.1f%%", v) else "masked")
+    # Place labels from the zone's largest piece so outlying islands do not pull them away.
+    main <- g[g$piece == names(which.max(table(g$piece))), ]
+    capital <- g$zone[1] == "capital"
+    data.frame(country = g$country[1], x = mean(range(main$x)),
+               y = if (capital) max(main$y) + .45 else mean(range(main$y)) - .4, label = text)
+  }))
+  titles <- do.call(rbind, lapply(split(b, b$country), function(g)
+    data.frame(x = mean(range(g$x)), y = max(g$y) + 1.1, label = g$country[1])))
+  # A fixed ±50 scale keeps colours comparable from month to month while the slider plays.
+  limit <- heatmap_clamp
+  capital <- b[b$zone == "capital", ]
+  ggplot(b, aes(x, y, group = piece)) +
+    geom_polygon(data = b[b$zone == "non_capital", ], aes(fill = value), colour = "white", linewidth = .25) +
+    geom_polygon(data = capital, fill = NA, colour = ink, linewidth = 1.1) +
+    geom_polygon(data = capital, aes(fill = value), colour = NA) +
+    geom_polygon(data = capital, fill = NA, colour = "white", linewidth = .25) +
+    geom_label(data = labels, aes(x, y, label = label), inherit.aes = FALSE, size = 3.4,
+               lineheight = .9, linewidth = 0, fill = "white", alpha = .85, colour = ink) +
+    geom_text(data = titles, aes(x, y, label = label), inherit.aes = FALSE, fontface = "bold",
+              size = 4, colour = ink) +
+    scale_fill_gradient2(low = orange, mid = neutral, high = teal, midpoint = 0, limits = c(-limit, limit),
+                         oob = scales::squish, na.value = "#dedede") +
+    coord_fixed(clip = "off") +
+    labs(x = NULL, y = NULL, fill = unit) +
+    chart_theme + theme(axis.text = element_blank(), panel.grid.major = element_blank(),
+                        legend.key.width = grid::unit(2.2, "lines"))
+}

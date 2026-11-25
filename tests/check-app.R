@@ -68,6 +68,40 @@ testServer(server, {
   stopifnot(setequal(csv$finding, finding_ids), nzchar(output$findings_conclusion))
 })
 
+# Capital vs non-capital map: Natural Earth units tagged by ISO 3166-2 code.
+units <- unique(boundaries[c("country", "unit_code", "zone")])
+zone_of <- function(code) units$zone[units$unit_code == code]
+stopifnot(sum(units$country == "Korea") == 17L, sum(units$country == "Taiwan") == 21L,
+          setequal(units$unit_code[units$zone == "capital"], c("KR-11", "KR-28", "KR-41", "TW-TPE", "TW-TPQ", "TW-KEE")),
+          zone_of("TW-TAO") == "non_capital", zone_of("KR-50") == "non_capital",
+          length(map_months) == 36L,
+          identical(format(seq(min(map_months), by = 31, length.out = 36), "%Y%m"), format(map_months, "%Y%m")))
+testServer(server, {
+  session$setInputs(tab = "overview", country = "both", overview_view = "industry_map", category = "food",
+                    overview_period = "since_covid_onset")
+  for (day in c("2020-03-01", "2021-06-01", "2022-07-01")) {
+    session$setInputs(map_month = as.Date(day))
+    v <- map_values()
+    target <- as.integer(format(as.Date(day), "%Y%m"))
+    expected <- subset(spending, category == "food" & month == target & capital_area %in% c("capital", "non_capital"))
+    stopifnot(nrow(v) == 4L, all(v$month == target),
+              identical(v$yoy, expected$yoy[match(paste(v$country, v$capital_area),
+                                                  paste(expected$country, expected$capital_area))]),
+              startsWith(output$chart$src, "data:image/png"), grepl("Map of year-over-year food", output$chart$alt),
+              lengths(regmatches(output$chart$alt, gregexpr("Korea|Taiwan", output$chart$alt))) == 4L,
+              grepl("<table", output$summary, fixed = TRUE), grepl("stringency", output$coverage, fixed = TRUE))
+    csv <- read.csv(output$download)
+    stopifnot(nrow(csv) == 4L, isTRUE(all.equal(csv$yoy_pct, v$yoy)))
+  }
+  # June 2021 is inside Taiwan's masked window: both Taiwan zones are NA and say so.
+  session$setInputs(map_month = as.Date("2021-06-01"))
+  stopifnot(all(is.na(map_values()$yoy[map_values()$country == "Taiwan"])),
+            all(is.finite(map_values()$yoy[map_values()$country == "Korea"])),
+            grepl("Taiwan capital area masked", output$chart$alt, fixed = TRUE))
+  session$setInputs(map_month = as.Date("2020-01-01"), country = "Korea")
+  stopifnot(nrow(map_values()) == 2L, grepl("no complete case count", output$coverage, fixed = TRUE))
+})
+
 # The overview exports the values represented by each heatmap tile.
 testServer(server, {
   session$setInputs(tab = "overview", country = "both", overview_view = "industry_growth",

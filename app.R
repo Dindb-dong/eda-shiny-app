@@ -21,8 +21,11 @@ covid <- summarize_covid_monthly(covid_daily)
 age_profile <- read_age_profile(industry = industry)
 card_comparison <- read_card_comparison()
 findings <- build_findings(spending, covid, categories)
+boundaries <- read_region_boundaries()
+map_months <- seq(as.Date("2020-01-01"), as.Date("2022-12-01"), by = "month")
 
 overview_views <- c(industry_growth = "Spending growth by area", industry_gap = "Capital–non-capital gap")
+map_views <- c(industry_map = "Capital vs non-capital map")
 relationship_views <- c(scatter = "Monthly scatter", aligned = "Aligned timeline",
                         lags = "Lag profile", adjusted = "Detrended and seasonally adjusted scatter",
                         conditioning = "Condition on restriction stringency",
@@ -42,7 +45,7 @@ diagnostic_views <- c(backtest = "2019 forecast backtest",
 age_views <- c(age_observed = "Observed mean ticket by age and month",
                age_compare = "Ordinary and robust bivariate LOESS",
                age_residual = "Robust LOESS residual map")
-view_names <- c(overview_views, relationship_views, spending_views, diagnostic_views, age_views)
+view_names <- c(overview_views, map_views, relationship_views, spending_views, diagnostic_views, age_views)
 # Chart headings say what to look for; the selector keeps the short method names.
 view_titles <- c(
   industry_growth = "Which industries fell or grew, month by month",
@@ -64,6 +67,7 @@ spending_choices <- c("Year-over-year growth" = "yoy", "2019 index" = "index",
 
 chart_notes <- c(
   industry_growth = "Each cell shows spending growth from the same month a year earlier. Orange indicates a decline and teal indicates growth. Colours stop at ±50%; larger values share the end colour. Grey Taiwan cells (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021.",
+  industry_map = "Each zone is filled with spending growth from the same month a year earlier. The capital zone has a heavier outline. The colour scale is fixed at ±50% so months can be compared while the slider plays. Grey Taiwan zones (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021. Matsu (Lienchiang County, non-capital) is absent from the boundary source but included in the spending totals.",
   industry_gap = "Each cell subtracts non-capital growth from capital-area growth in the same industry and month. Teal means growth was higher in the capital area. Colours stop at ±50 points. Grey Taiwan cells (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021.",
   scatter = "Each point is one spending month. The dashed line is linear. The purple line is a local linear fit (LOESS).",
   aligned = "Both series are standardized within their own paired window. The horizontal axis follows the spending month.",
@@ -112,19 +116,25 @@ relationship_ui <- tagList(
         selectInput("country", "Country", c("Korea and Taiwan" = "both", "Korea", "Taiwan"), selectize = FALSE)),
       conditionalPanel("!['age','overview'].includes(input.tab)",
         selectInput("area", "Geography", c(choices(areas), "Capital and non-capital areas" = "both"), selectize = FALSE)),
-      conditionalPanel("input.tab !== 'overview'",
+      conditionalPanel("input.tab !== 'overview' || input.overview_view === 'industry_map'",
         selectInput("category", "Card category", choices(categories), selectize = FALSE)),
       conditionalPanel("!['age','overview'].includes(input.tab)",
         selectInput("measure", "Spending measure", spending_choices, selectize = FALSE)),
       conditionalPanel("input.tab === 'overview'",
         selectInput("overview_view", "View",
-                    c("Growth by area" = "industry_growth", "Capital area gap" = "industry_gap"),
+                    c("Growth by area" = "industry_growth", "Capital area gap" = "industry_gap",
+                      "Capital vs non-capital map" = "industry_map"),
                     selectize = FALSE)),
-      conditionalPanel("input.tab === 'overview'",
+      conditionalPanel("input.tab === 'overview' && input.overview_view !== 'industry_map'",
         selectInput("overview_period", "Spending period",
                     c("2020–2022" = "since_covid_onset", "2015–2019" = "pre_covid", "2015–2022" = "all"),
                     selectize = FALSE))),
     tags$div(class = "filter-grid analysis-options",
+      conditionalPanel("input.tab === 'overview' && input.overview_view === 'industry_map'", class = "sensitivity-option",
+        # Date slider steps are in days; 31-day steps from 1 Jan 2020 land in each of the 36 months once.
+        sliderInput("map_month", "Month (press play to step through 2020–2022)", min = min(map_months),
+                    max = max(map_months), value = as.Date("2020-03-01"), step = 31, timeFormat = "%b %Y",
+                    ticks = FALSE, width = "100%", animate = animationOptions(interval = 1200))),
       conditionalPanel("input.tab === 'relationship'",
         selectInput("relationship_view", "View", choices(relationship_views), selectize = FALSE)),
       conditionalPanel("input.tab === 'spending'",
@@ -146,7 +156,7 @@ relationship_ui <- tagList(
       tags$p(class = "chart-note", textOutput("note", inline = TRUE)),
       plotOutput("chart", height = "auto"),
       tags$p(class = "coverage", textOutput("coverage", inline = TRUE))),
-    conditionalPanel("input.tab === 'overview'",
+    conditionalPanel("input.tab === 'overview' && input.overview_view !== 'industry_map'",
       tags$section(class = "analysis-section", "aria-labelledby" = "industry-detail-title",
         tags$h2(id = "industry-detail-title", "Explore an industry"),
         tags$div(class = "filter-grid analysis-options industry-detail-controls",
@@ -221,6 +231,13 @@ server <- function(input, output, session) {
   selected_countries <- reactive(if (req(input$country) == "both") unname(countries) else input$country)
   overview_data <- reactive(industry_months(spending, selected_countries(), req(input$overview_period),
                                             req(input$overview_view)))
+  map_month <- reactive({
+    month <- format(as.Date(req(input$map_month)), "%Y%m")
+    validate(need(month %in% format(map_months, "%Y%m"), "Choose a month from January 2020 to December 2022."))
+    as.integer(month)
+  })
+  map_values <- reactive(zone_values(spending, covid, selected_countries(), req(input$category), map_month()))
+  map_label <- function(month) format(as.Date(paste0(month, "01"), "%Y%m%d"), "%b %Y")
   overview_unit <- reactive(if (active_view() == "industry_gap") "Gap (percentage points)" else "Growth (%)")
 
   observeEvent(input$open_industry_detail, {
@@ -280,6 +297,7 @@ server <- function(input, output, session) {
       return(list(columns = 1L, height = if (active_view() == "age_compare") 600 else 345))
     }
     width <- session$clientData$output_chart_width %||% 1000
+    if (active_view() == "industry_map") return(list(columns = 1L, height = if (width >= 590) 520L else 440L))
     columns <- if (width >= 590) 2L else 1L
     if (active_view() %in% names(overview_views)) {
       rows <- ceiling(length(unique(overview_data()$panel)) / columns)
@@ -298,6 +316,14 @@ server <- function(input, output, session) {
   })
   output$coverage <- renderText({
     view <- active_view()
+    if (view == "industry_map") {
+      v <- map_values()[!duplicated(map_values()$country), ]
+      cases <- ifelse(is.finite(v$cases_per_million),
+                      paste(format(round(v$cases_per_million), big.mark = ","), "cases per million"),
+                      "no complete case count")
+      return(paste0("National COVID-19 context, ", map_label(map_month()), " · ",
+                    paste(sprintf("%s: stringency %.0f, %s", v$country, v$stringency, cases), collapse = " · ")))
+    }
     if (view %in% names(overview_views)) {
       d <- overview_data()
       return(paste(format(min(d$date), "%b %Y"), "–", format(max(d$date), "%b %Y"),
@@ -318,6 +344,7 @@ server <- function(input, output, session) {
   output$chart <- renderPlot({
     columns <- layout()$columns
     view <- active_view()
+    if (view == "industry_map") return(zone_map(boundaries, map_values(), "Growth (%)"))
     if (view %in% names(overview_views)) return(industry_heatmap(overview_data(), categories, overview_unit(), columns))
     if (req(input$tab) == "age") return(age_plot(age_data(), view))
     if (view %in% forecast_views) return(forecast_plot(predicted(), view, columns))
@@ -329,6 +356,14 @@ server <- function(input, output, session) {
       diagnostics = diagnostic_plot(selection(), if (uses_pairs()) paired() else NULL,
                                     view, input$measure, columns))
   }, alt = function() {
+    if (active_view() == "industry_map") {
+      v <- map_values()
+      values <- ifelse(is.finite(v$yoy), sprintf("%+.1f%%", v$yoy), "masked")
+      return(paste0("Map of year-over-year ", tolower(categories[[input$category]]), " spending growth in ",
+                    map_label(map_month()), " by zone: ",
+                    paste(sprintf("%s %s %s", v$country, tolower(v$region), values), collapse = "; "),
+                    ". Values are also in the table below."))
+    }
     if (active_view() %in% names(overview_views)) {
       return(paste("Heatmap of", view_names[[active_view()]], "for",
                    paste(selected_countries(), collapse = " and "),
@@ -342,6 +377,12 @@ server <- function(input, output, session) {
 
   output$summary <- renderTable({
     view <- active_view()
+    if (view == "industry_map") {
+      v <- map_values()
+      return(data.frame(Country = v$country, Zone = v$region, Industry = unname(categories[v$category]),
+                        Month = map_label(v$month), "YoY growth (%)" = v$yoy, "Stringency (national)" = v$stringency,
+                        "Cases per million (national)" = v$cases_per_million, check.names = FALSE))
+    }
     if (view %in% names(overview_views)) {
       d <- overview_data()
       return(by_series(d, function(g) {
@@ -391,6 +432,13 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       view <- active_view()
+      if (view == "industry_map") {
+        d <- map_values()
+        d$industry <- unname(categories[d$category])
+        names(d)[names(d) == "yoy"] <- "yoy_pct"
+        write.csv(d, file, row.names = FALSE, na = "")
+        return(invisible(NULL))
+      }
       if (view %in% names(overview_views)) {
         d <- overview_data()
         d$industry <- unname(categories[d$category])
