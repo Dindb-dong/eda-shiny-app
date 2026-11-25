@@ -49,8 +49,8 @@ spending_choices <- c("Year-over-year growth" = "yoy", "2019 index" = "index",
                       "Month-over-month growth" = "monthly", "First + seasonal difference" = "double_diff")
 
 chart_notes <- c(
-  industry_growth = "Each cell shows spending growth from the same month a year earlier. Orange indicates a decline and teal indicates growth.",
-  industry_gap = "Each cell subtracts non-capital growth from capital-area growth in the same industry and month. Teal means growth was higher in the capital area.",
+  industry_growth = "Each cell shows spending growth from the same month a year earlier. Orange indicates a decline and teal indicates growth. Colours stop at ±50%; larger values share the end colour. Grey Taiwan cells (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021.",
+  industry_gap = "Each cell subtracts non-capital growth from capital-area growth in the same industry and month. Teal means growth was higher in the capital area. Colours stop at ±50 points. Grey Taiwan cells (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021.",
   scatter = "Each point is one spending month. The dashed line is linear. The purple line is a local linear fit (LOESS).",
   aligned = "Both series are standardized within their own paired window. The horizontal axis follows the spending month.",
   lags = "Each point uses a separate calendar-month join. Counts fall at longer leads as the matched window gets shorter.",
@@ -58,10 +58,10 @@ chart_notes <- c(
   conditioning = "Bands use a fixed 50-point threshold in the COVID-19 month. Select cases or deaths to explore the pattern within restriction bands.",
   outcomes = "Counts use year-over-year growth below −5%, between −5% and 5%, and above 5%. The 50-point stringency cutoff is fixed across panels.",
   binary = "Dots show whether spending fell from the same month last year. The logistic curve is fitted only when both outcomes have at least four observations and overlapping stringency ranges.",
-  timeline = "The dotted line marks January 2020, the common period boundary.",
+  timeline = "The dotted line marks January 2020, the common period boundary. Taiwan’s 2019 index and pre-COVID gap are level measures and still contain the February 2021 category shift.",
   heatmap = "Orange is below the reference and teal is above it. The reference is 100 for the spending index or zero for changes.",
   distribution = "The curves show the fraction of months at or below each value. Rugs show observed months.",
-  projection = "The dashed line extends a pre-2020 log-linear trend with calendar-month effects. This view uses the 2019 spending index.",
+  projection = "The dashed line extends a pre-2020 log-linear trend with calendar-month effects. This view uses the 2019 spending index, so Taiwan’s February 2021 category shift appears as a step.",
   box = "Boxes summarize the median and central half of observed monthly values in each period.",
   backtest = "Models fit through December 2018 and forecast the 12 unseen months of 2019. MAE and RMSE below are in index points.",
   forecast = "Models fit through December 2019 and forecast 2020–2022. The summary scores the earlier 2019 holdout. Lines are point forecasts on the back-transformed log scale.",
@@ -124,9 +124,7 @@ relationship_ui <- tagList(
       selectInput("metric", "COVID-19 measure", choices(covid_measures), selected = "stringency", selectize = FALSE)),
     conditionalPanel(paste0("(", uses_covid_options, ") && (input.tab !== 'relationship' || input.relationship_view !== 'lags')"),
       selectInput("lead", "COVID-19 leads spending", c("Same month" = 0, "1 month" = 1, "2 months" = 2, "3 months" = 3),
-                  selectize = FALSE)),
-    conditionalPanel(uses_covid_options, class = "sensitivity-option",
-      checkboxInput("omit_feb", "Exclude Taiwan’s February 2021 spending", value = FALSE))),
+                  selectize = FALSE))),
   tags$section(class = "analysis-section", "aria-labelledby" = "chart-title",
     tags$h2(id = "chart-title", textOutput("title", inline = TRUE)),
     tags$p(class = "chart-note", textOutput("note", inline = TRUE)),
@@ -153,6 +151,7 @@ relationship_ui <- tagList(
     tags$p("Cases and deaths are daily reports summed by month. Negative reporting adjustments are retained. Stringency is averaged by month. Count plots use an inverse hyperbolic sine scale, which retains zeros."),
     tags$p("The nationwide spending totals include unassigned amounts. Capital and non-capital series exclude them. Korea uses Seoul, Incheon, and Gyeonggi. Taiwan uses Taipei, New Taipei, and Keelung."),
     tags$p("Spending amounts are nominal and source coverage varies by country and category. The 2019 index uses each series’ own 2019 average. The same-month median uses 2014–2019. Growth and differences are calculated before filtering by period."),
+    tags$p("Taiwan’s NCCC category mix shifts abruptly in February 2021: food falls from about 38.7 to 18.7 billion TWD between January and February while general retail rises from 29.2 to 45.9 billion. This is consistent with a source reclassification of merchants rather than a COVID-19 effect. Every Taiwan change measure whose two months straddle the shift is therefore left missing: year-over-year growth and the 12-month log difference for February 2021 – January 2022, month-over-month growth for February 2021, and the combined difference wherever an input is missing. The 2019 index and the pre-COVID gap are level measures that cannot be repaired, so read Taiwan’s levels across February 2021 with caution."),
     tags$p("Industry categories use each source’s definitions. Lodging, vehicles and source-defined Other are best read within each country. National COVID-19 measures are shared by both spending areas."),
     tags$p("The joined series has at most 36 months (January 2020 – December 2022) per country and region; January 2020 has stringency but no complete case or death counts. Shared trends, extreme months, and serial dependence can drive the fitted patterns. These charts describe associations."))
 )
@@ -245,7 +244,7 @@ server <- function(input, output, session) {
   paired <- reactive({
     # Lag-profile charts calculate all leads; their summary and download use zero.
     lead <- if (active_view() == "lags") 0L else as.integer(req(input$lead))
-    pair_months(selection(), covid, analysis_metric(), lead, isTRUE(input$omit_feb))
+    pair_months(selection(), covid, analysis_metric(), lead)
   })
   holdout <- reactive(by_series(selection(), forecast_backtest))
   predicted <- reactive({
@@ -305,7 +304,7 @@ server <- function(input, output, session) {
     if (view == "break_model") return(break_plot(segmented(), columns))
     switch(req(input$tab),
       relationship = relationship_plot(paired(), selection(), covid, view, analysis_metric(), analysis_measure(),
-                                       isTRUE(input$omit_feb), columns),
+                                       columns),
       spending = spending_plot(shown_spending(), selection(), view, analysis_measure(), columns),
       diagnostics = diagnostic_plot(selection(), if (uses_pairs()) paired() else NULL,
                                     view, input$measure, columns))
@@ -353,7 +352,7 @@ server <- function(input, output, session) {
                    Pearson = safe_correlation(g$x, g$value, "pearson"),
                    Spearman = safe_correlation(g$x, g$value),
                    "Adjusted Pearson" = safe_correlation(adjusted$x_adjusted, adjusted$y_adjusted, "pearson"),
-                   "Decline months" = sum(g$yoy < 0), check.names = FALSE)
+                   "Decline months" = sum(g$yoy < 0, na.rm = TRUE), check.names = FALSE)
       }))
     }
     d <- subset(shown_spending(), is.finite(value))

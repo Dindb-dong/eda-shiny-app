@@ -17,6 +17,23 @@ jan2019 <- subset(korea, month == 201901)
 stopifnot(isTRUE(all.equal(jan2020$yoy, 100 * (jan2020$amount_local / jan2019$amount_local - 1))),
           isTRUE(all.equal(jan2020$seasonal, 100 * log(jan2020$amount_local / jan2019$amount_local))))
 
+# Taiwan's February 2021 category shift: the source mix changes abruptly ...
+tw_national <- subset(spending, country == "Taiwan" & capital_area == "national")
+level <- function(category, month) tw_national$amount_local[tw_national$category == category & tw_national$month == month]
+stopifnot(abs(level("food", 202101) / 1e9 - 38.7) < .05, abs(level("food", 202102) / 1e9 - 18.7) < .05,
+          abs(level("retail_broad", 202101) / 1e9 - 29.2) < .05, abs(level("retail_broad", 202102) / 1e9 - 45.9) < .05)
+# ... so every Taiwan change measure straddling it is masked, in all categories and areas.
+taiwan <- subset(spending, country == "Taiwan")
+korea_all <- subset(spending, country == "Korea")
+straddles <- taiwan$month >= 202102 & taiwan$month <= 202201
+stopifnot(all(is.na(taiwan$yoy[straddles])), all(is.na(taiwan$seasonal[straddles])),
+          all(is.na(taiwan$monthly[taiwan$month == 202102])), all(is.na(taiwan$double_diff[straddles])),
+          all(is.na(taiwan$double_diff[taiwan$month == 202202])),
+          all(is.finite(taiwan$yoy[taiwan$month == 202202])), all(is.finite(taiwan$yoy[taiwan$month == 202101])),
+          all(is.finite(taiwan$monthly[taiwan$month == 202103])),
+          all(is.finite(taiwan$index)), all(is.finite(taiwan$gap)),
+          all(is.finite(korea_all$yoy[korea_all$month >= 201501])))
+
 # The labelled STL rows must keep trend and seasonal values distinct.
 parts <- seasonal_decomposition(korea)
 expected_parts <- stl(ts(log(korea$amount_local), frequency = 12),
@@ -36,7 +53,11 @@ testServer(server, {
             length(unique(growth$panel)) == 4L, startsWith(output$chart$src, "data:image/png"),
             grepl("Median", output$summary, fixed = TRUE))
   csv <- read.csv(output$download)
-  stopifnot(nrow(csv) == nrow(growth), isTRUE(all.equal(csv$yoy_pct, growth$value)))
+  stopifnot(nrow(csv) == nrow(growth), isTRUE(all.equal(csv$yoy_pct, growth$value)),
+            sum(is.na(growth$value)) == 2L * 7L * 12L)
+  # The clamped colour scale keeps Taiwan's 2022 base-effect spikes from washing out Korea.
+  stopifnot(identical(industry_heatmap(growth, categories, "Growth (%)", 2L)$scales$get_scales("fill")$limits,
+                      c(-heatmap_clamp, heatmap_clamp)))
   session$setInputs(country = "Taiwan", overview_view = "industry_gap", overview_period = "pre_covid")
   gap <- overview_data()
   capital <- subset(spending, country == "Taiwan" & capital_area == "capital")
@@ -56,7 +77,7 @@ testServer(server, {
 # Render every dashboard view through the real Shiny server.
 testServer(server, {
   session$setInputs(tab = "relationship", country = "both", area = "both", category = "food",
-                    measure = "yoy", metric = "stringency", lead = "0", omit_feb = FALSE,
+                    measure = "yoy", metric = "stringency", lead = "0",
                     period = "all", relationship_view = "scatter", age_view = "age_observed",
                     spending_view = "timeline", diagnostic_view = "stl")
   assert_chart <- function() {
@@ -64,13 +85,13 @@ testServer(server, {
               grepl("<table", output$summary, fixed = TRUE))
   }
   d <- paired()
-  stopifnot(identical(sort(as.integer(table(d$panel))), rep(36L, 4)),
+  stopifnot(identical(sort(as.integer(table(d$panel))), c(24L, 24L, 36L, 36L)),
             all(d$month_id == month_id(d$covid_date)),
             all(d$stringency == covid$stringency[match(paste(d$country, d$covid_date),
                                                        paste(covid$country, covid$covid_date))]))
-  session$setInputs(lead = "1", omit_feb = TRUE)
+  session$setInputs(lead = "1")
   d <- paired()
-  stopifnot(identical(as.integer(table(d$panel)), c(35L, 35L, 34L, 34L)),
+  stopifnot(identical(as.integer(table(d$panel)), c(35L, 35L, 23L, 23L)),
             all(d$month_id - month_id(d$covid_date) == 1),
             !any(d$country == "Taiwan" & d$month == 202102))
   for (view in names(relationship_views)) {
@@ -93,7 +114,8 @@ testServer(server, {
   stopifnot(all(is.finite(segmented()$segmented)), all(abs(segmented()$phi) < 1))
   session$setInputs(period = "since_covid_onset", spending_view = "timeline")
   stopifnot(all(shown_spending()$date >= onset), nrow(shown_spending()) == 144L,
-            all(is.finite(shown_spending()$value)))
+            identical(is.finite(shown_spending()$value),
+                      !(shown_spending()$country == "Taiwan" & shown_spending()$month %in% 202102:202201)))
   for (view in names(diagnostic_views)) {
     session$setInputs(tab = "diagnostics", diagnostic_view = view)
     assert_chart()
@@ -106,14 +128,14 @@ testServer(server, {
             all(is.finite(age_data()$robust)))
   session$setInputs(tab = "relationship", relationship_view = "scatter", country = "Taiwan",
                     area = "capital", metric = "cases", category = "apparel")
-  stopifnot(nrow(paired()) == 33L, all(paired()$country == "Taiwan"),
+  stopifnot(nrow(paired()) == 22L, all(paired()$country == "Taiwan"),
             all(paired()$capital_area == "capital"), all(paired()$category == "apparel"))
   assert_chart()
   downloaded <- read.csv(output$download)
-  stopifnot(nrow(downloaded) == 33L, all(downloaded$covid_measure == "cases"),
+  stopifnot(nrow(downloaded) == 22L, all(downloaded$covid_measure == "cases"),
             identical(downloaded$month, paired()$month))
   session$setInputs(country = "both", area = "both", metric = "stringency",
-                    lead = "0", omit_feb = FALSE, age_view = "age_observed")
+                    lead = "0", age_view = "age_observed")
   session$setInputs(tab = "spending", spending_view = "forecast", category = "retail_broad",
                     country = "Taiwan", area = "capital")
   stopifnot(all(is.finite(predicted()$prediction)),
@@ -122,11 +144,11 @@ testServer(server, {
   session$setInputs(country = "both", area = "both")
   for (category in setdiff(names(categories), c("food", "apparel"))) {
     session$setInputs(tab = "relationship", category = category)
-    stopifnot(all(paired()$category == category), all(table(paired()$panel) == 36L),
+    stopifnot(all(paired()$category == category), identical(as.integer(table(paired()$panel)), c(36L, 36L, 24L, 24L)),
               length(unique(paired()$panel)) == 4L)
     assert_chart()
     downloaded <- read.csv(output$download)
-    stopifnot(nrow(downloaded) == 144L, all(downloaded$category == category))
+    stopifnot(nrow(downloaded) == 120L, all(downloaded$category == category))
     session$setInputs(tab = "age")
     stopifnot(nrow(age_data()) == 576L, all(age_data()$category == category))
     assert_chart()

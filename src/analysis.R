@@ -78,6 +78,17 @@ read_spending <- function(path = "data", industry = read_industry_crosswalk(path
     g$monthly <- 100 * (amount / last_month - 1)
     g$double_diff <- g$seasonal - g$seasonal[match(g$month_id - 1L, g$month_id)]
     g$gap <- 100 * (amount / unname(median_by_month[as.character(g$season)]) - 1)
+    if (g$country[1] == "Taiwan") {
+      # NCCC's category mix shifts abruptly in February 2021 (food falls by half and
+      # general retail jumps in the same month), consistent with a merchant
+      # reclassification. Change measures whose endpoints straddle that month are
+      # artifacts, so mask them in every category; level measures cannot be repaired.
+      straddles <- g$month >= 202102 & g$month <= 202201
+      g$yoy[straddles] <- NA
+      g$seasonal[straddles] <- NA
+      g$monthly[g$month == 202102] <- NA
+      g$double_diff <- g$seasonal - g$seasonal[match(g$month_id - 1L, g$month_id)]
+    }
     g
   }, keys = c("country", "category", "capital_area"))
 }
@@ -109,11 +120,10 @@ by_series <- function(data, fn, keys = "panel") {
   do.call(rbind, lapply(groups, function(g) fn(g[order(g$date), , drop = FALSE])))
 }
 
-pair_months <- function(spending, covid, metric, lead = 0L, omit_feb = FALSE) {
+pair_months <- function(spending, covid, metric, lead = 0L) {
   spending$covid_month_id <- spending$month_id - lead
   paired <- merge(spending, covid,
                   by.x = c("country", "covid_month_id"), by.y = c("country", "month_id"))
-  if (omit_feb) paired <- subset(paired, country != "Taiwan" | month != 202102)
   paired$x <- paired[[metric]]
   # asinh retains zero and negative reporting corrections.
   if (metric != "stringency") paired$x <- asinh(paired$x / 100)

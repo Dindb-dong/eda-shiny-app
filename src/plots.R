@@ -6,6 +6,7 @@ teal <- "#087d70"
 purple <- "#7441b4"
 neutral <- "#f7f5ee"
 year_colors <- c("2020" = purple, "2021" = blue, "2022" = orange)
+heatmap_clamp <- 50
 period_colors <- c("Before onset" = blue, "Since onset" = orange)
 
 chart_theme <- theme_minimal(base_size = 13) +
@@ -25,7 +26,8 @@ industry_heatmap <- function(d, categories, unit, columns) {
   width_in_years <- if (diff(range(d$month)) > 500L) 2L else 1L
   years <- seq(as.integer(format(min(d$date), "%Y")), as.integer(format(max(d$date), "%Y")),
                by = width_in_years)
-  limit <- max(1, abs(d$value[is.finite(d$value)]))
+  # Clamp at ±50 so a few extreme months do not wash out the rest; exact values are in the CSV.
+  limit <- min(heatmap_clamp, max(1, abs(d$value[is.finite(d$value)])))
   labels <- vapply(categories, function(label) paste(strwrap(label, 25L), collapse = "\n"), character(1))
   d$month_id <- month_id(d$date)
   d$category <- factor(d$category, levels = rev(names(categories)))
@@ -34,7 +36,7 @@ industry_heatmap <- function(d, categories, unit, columns) {
     scale_x_continuous(breaks = 12L * years + 1L, labels = years) +
     scale_y_discrete(labels = labels) +
     scale_fill_gradient2(low = orange, mid = neutral, high = teal, midpoint = 0,
-                         limits = c(-limit, limit), na.value = "#dedede") +
+                         limits = c(-limit, limit), oob = scales::squish, na.value = "#dedede") +
     labs(x = NULL, y = NULL, fill = unit) +
     facet_wrap(vars(panel), ncol = columns, labeller = labeller(panel = label_wrap_gen(16L + 12L * (columns > 1L)))) +
     chart_theme + theme(panel.grid = element_blank(),
@@ -42,7 +44,7 @@ industry_heatmap <- function(d, categories, unit, columns) {
                         strip.text = element_text(size = 10, lineheight = .9))
 }
 
-relationship_plot <- function(paired, spending, covid, view, metric, measure, omit_feb, columns) {
+relationship_plot <- function(paired, spending, covid, view, metric, measure, columns) {
   y_label <- spending_measures[[measure]]
   x_label <- covid_measures[[metric]]
   if (metric != "stringency") x_label <- paste0(x_label, " (asinh of count / 100)")
@@ -51,7 +53,7 @@ relationship_plot <- function(paired, spending, covid, view, metric, measure, om
 
   if (view == "lags") {
     points <- do.call(rbind, lapply(0:3, function(lead) {
-      d <- pair_months(spending, covid, metric, lead, omit_feb)
+      d <- pair_months(spending, covid, metric, lead)
       by_series(d, function(g) data.frame(panel = g$panel[1], lead = lead, n = nrow(g),
                                           rho = safe_correlation(g$x, g$value)))
     }))
@@ -193,9 +195,11 @@ diagnostic_plot <- function(d, paired, view, measure, columns) {
   }
   if (view %in% c("acf", "pacf")) {
     ac <- by_series(d, function(g) {
-      values <- g$value[is.finite(g$value)]
-      a <- if (view == "pacf") pacf(values, plot = FALSE, lag.max = 24)
-           else acf(values, plot = FALSE, lag.max = 24)
+      # Keep interior gaps (Taiwan's masked months) in place so lags stay calendar lags.
+      observed <- which(is.finite(g$value))
+      values <- g$value[min(observed):max(observed)]
+      a <- if (view == "pacf") pacf(values, plot = FALSE, lag.max = 24, na.action = na.pass)
+           else acf(values, plot = FALSE, lag.max = 24, na.action = na.pass)
       keep <- as.numeric(a$lag) > 0
       data.frame(panel = g$panel[1], lag = as.numeric(a$lag)[keep], value = as.numeric(a$acf)[keep])
     })
