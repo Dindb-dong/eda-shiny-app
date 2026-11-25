@@ -39,7 +39,7 @@ industry_heatmap <- function(d, categories, unit, columns) {
                          limits = c(-limit, limit), oob = scales::squish, na.value = "#dedede") +
     labs(x = NULL, y = NULL, fill = unit) +
     facet_wrap(vars(panel), ncol = columns, labeller = labeller(panel = label_wrap_gen(16L + 12L * (columns > 1L)))) +
-    chart_theme + theme(panel.grid = element_blank(),
+    chart_theme + theme(panel.grid = element_blank(), legend.key.width = grid::unit(3, "lines"),
                         axis.text.y = element_text(size = 9, lineheight = .85),
                         strip.text = element_text(size = 10, lineheight = .9))
 }
@@ -355,5 +355,5 @@ zone_map <- function(boundaries, values, unit) {
     coord_fixed(clip = "off") +
     labs(x = NULL, y = NULL, fill = unit) +
     chart_theme + theme(axis.text = element_blank(), panel.grid.major = element_blank(),
-                        legend.key.width = grid::unit(2.2, "lines"))
+                        legend.key.width = grid::unit(3, "lines"))
 }

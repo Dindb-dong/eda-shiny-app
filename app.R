@@ -109,7 +109,7 @@ relationship_ui <- tagList(
     tabPanel("Relationship", value = "relationship"),
     tabPanel("Before and since onset", value = "spending"),
     tabPanel("Taiwan age profile", value = "age"),
-    tabPanel("Appendix: models and diagnostics", value = "diagnostics")),
+    tabPanel("Appendix", value = "diagnostics")),
   conditionalPanel("input.tab !== 'findings'",
     tags$div(class = "filter-grid main-filters",
       conditionalPanel("input.tab !== 'age'",

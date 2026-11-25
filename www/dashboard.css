@@ -63,6 +63,7 @@ body {
   border-radius: 0;
   color: var(--quiet);
   background: transparent;
+  white-space: nowrap;
 }
 :is(#tab, #covid_views, #covid_timeline-view) > li.active > a { border-block-end-color: var(--ink); color: var(--ink); font-weight: 650; }
 :is(#tab, #covid_views, #covid_timeline-view) > li > a:hover { color: var(--ink); text-decoration: underline; }
