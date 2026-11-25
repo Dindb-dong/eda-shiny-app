@@ -37,6 +37,9 @@ read_covid_daily <- function(path = "data") {
   d
 }
 
+# A month's cases, deaths or stringency are reported only when every calendar
+# day has a value. JHU CSSE starts on 22 January 2020 (the first daily change is
+# 23 January), so January 2020 cases and deaths stay NA; its stringency is complete.
 summarize_covid_monthly <- function(d) {
   d$month_id <- month_id(d$date)
   d <- lapply(split(d, list(d$country, d$month_id), drop = TRUE), function(g) {

@@ -5,7 +5,8 @@ orange <- "#b95013"
 teal <- "#087d70"
 purple <- "#7441b4"
 neutral <- "#f7f5ee"
-year_colors <- c("2021" = blue, "2022" = orange)
+year_colors <- c("2020" = purple, "2021" = blue, "2022" = orange)
+heatmap_clamp <- 50
 period_colors <- c("Before onset" = blue, "Since onset" = orange)
 
 chart_theme <- theme_minimal(base_size = 13) +
@@ -25,7 +26,8 @@ industry_heatmap <- function(d, categories, unit, columns) {
   width_in_years <- if (diff(range(d$month)) > 500L) 2L else 1L
   years <- seq(as.integer(format(min(d$date), "%Y")), as.integer(format(max(d$date), "%Y")),
                by = width_in_years)
-  limit <- max(1, abs(d$value[is.finite(d$value)]))
+  # Clamp at ±50 so a few extreme months do not wash out the rest; exact values are in the CSV.
+  limit <- min(heatmap_clamp, max(1, abs(d$value[is.finite(d$value)])))
   labels <- vapply(categories, function(label) paste(strwrap(label, 25L), collapse = "\n"), character(1))
   d$month_id <- month_id(d$date)
   d$category <- factor(d$category, levels = rev(names(categories)))
@@ -34,15 +36,15 @@ industry_heatmap <- function(d, categories, unit, columns) {
     scale_x_continuous(breaks = 12L * years + 1L, labels = years) +
     scale_y_discrete(labels = labels) +
     scale_fill_gradient2(low = orange, mid = neutral, high = teal, midpoint = 0,
-                         limits = c(-limit, limit), na.value = "#dedede") +
+                         limits = c(-limit, limit), oob = scales::squish, na.value = "#dedede") +
     labs(x = NULL, y = NULL, fill = unit) +
     facet_wrap(vars(panel), ncol = columns, labeller = labeller(panel = label_wrap_gen(16L + 12L * (columns > 1L)))) +
-    chart_theme + theme(panel.grid = element_blank(),
+    chart_theme + theme(panel.grid = element_blank(), legend.key.width = grid::unit(3, "lines"),
                         axis.text.y = element_text(size = 9, lineheight = .85),
                         strip.text = element_text(size = 10, lineheight = .9))
 }
 
-relationship_plot <- function(paired, spending, covid, view, metric, measure, omit_feb, columns) {
+relationship_plot <- function(paired, spending, covid, view, metric, measure, columns) {
   y_label <- spending_measures[[measure]]
   x_label <- covid_measures[[metric]]
   if (metric != "stringency") x_label <- paste0(x_label, " (asinh of count / 100)")
@@ -51,7 +53,7 @@ relationship_plot <- function(paired, spending, covid, view, metric, measure, om
 
   if (view == "lags") {
     points <- do.call(rbind, lapply(0:3, function(lead) {
-      d <- pair_months(spending, covid, metric, lead, omit_feb)
+      d <- pair_months(spending, covid, metric, lead)
       by_series(d, function(g) data.frame(panel = g$panel[1], lead = lead, n = nrow(g),
                                           rho = safe_correlation(g$x, g$value)))
     }))
@@ -131,6 +133,7 @@ relationship_plot <- function(paired, spending, covid, view, metric, measure, om
   }
   p + geom_point(aes(colour = year, shape = year), size = 2.8, alpha = .9) +
     scale_colour_manual(values = year_colors) +
+    scale_shape_manual(values = c("2020" = 15, "2021" = 16, "2022" = 17)) +
     labs(x = x_label, y = y_label, colour = "Spending year", shape = "Spending year") +
     grid + chart_theme
 }
@@ -192,9 +195,11 @@ diagnostic_plot <- function(d, paired, view, measure, columns) {
   }
   if (view %in% c("acf", "pacf")) {
     ac <- by_series(d, function(g) {
-      values <- g$value[is.finite(g$value)]
-      a <- if (view == "pacf") pacf(values, plot = FALSE, lag.max = 24)
-           else acf(values, plot = FALSE, lag.max = 24)
+      # Keep interior gaps (Taiwan's masked months) in place so lags stay calendar lags.
+      observed <- which(is.finite(g$value))
+      values <- g$value[min(observed):max(observed)]
+      a <- if (view == "pacf") pacf(values, plot = FALSE, lag.max = 24, na.action = na.pass)
+           else acf(values, plot = FALSE, lag.max = 24, na.action = na.pass)
       keep <- as.numeric(a$lag) > 0
       data.frame(panel = g$panel[1], lag = as.numeric(a$lag)[keep], value = as.numeric(a$acf)[keep])
     })
@@ -303,4 +308,64 @@ age_plot <- function(d, view) {
     scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
     facet_wrap(vars(series), ncol = 1) +
     labs(x = NULL, y = "Age-band midpoint") + chart_theme
+}
+
+# Two-zone choropleth. Each country is projected around its own centre
+# (equirectangular, x scaled by cos(latitude)) and Taiwan is placed left of Korea at the
+# same scale, so one panel and one legend serve both without free-scale facets.
+zone_map <- function(boundaries, values, unit, unit_values = NULL) {
+  b <- boundaries[boundaries$country %in% values$country, ]
+  b <- do.call(rbind, lapply(split(b, b$country), function(g) {
+    centre <- c(mean(range(g$lon)), mean(range(g$lat)))
+    g$x <- (g$lon - centre[1]) * cos(centre[2] * pi / 180)
+    g$y <- g$lat - centre[2]
+    g
+  }))
+  if (all(c("Korea", "Taiwan") %in% b$country)) {
+    taiwan <- b$country == "Taiwan"
+    b$x[taiwan] <- b$x[taiwan] - max(b$x[taiwan]) + min(b$x[!taiwan]) - .6
+  }
+  b$value <- values$yoy[match(paste(b$country, b$zone), paste(values$country, values$capital_area))]
+  # Where city/county values exist, each unit carries its own value; labels keep the zone values.
+  by_unit <- b$country %in% unit_values$country
+  b$unit_value <- ifelse(by_unit, unit_values$yoy[match(b$unit_code, unit_values$unit_code)], b$value)
+  labels <- do.call(rbind, lapply(split(b, list(b$country, b$zone), drop = TRUE), function(g) {
+    v <- g$value[1]
+    text <- paste0(if (g$zone[1] == "capital") "Capital area" else "Non-capital area", "\n",
+                   if (is.finite(v)) sprintf("%+.1f%%", v) else "masked")
+    # Place labels from the zone's largest piece so outlying islands do not pull them away.
+    main <- g[g$piece == names(which.max(table(g$piece))), ]
+    capital <- g$zone[1] == "capital"
+    data.frame(country = g$country[1], x = mean(range(main$x)),
+               y = if (capital) max(main$y) + .45 else mean(range(main$y)) - .4, label = text)
+  }))
+  titles <- do.call(rbind, lapply(split(b, b$country), function(g)
+    data.frame(x = mean(range(g$x)), y = max(g$y) + 1.1, label = g$country[1])))
+  # A fixed ±50 scale keeps colours comparable from month to month while the slider plays.
+  limit <- heatmap_clamp
+  # Boundaries keep outer rings only, so draw large pieces first and enclosed units
+  # (Daegu, Gwangju, Taipei, Chiayi City, ...) on top of the units around them.
+  extent <- tapply(b$x, b$piece, function(x) diff(range(x))) * tapply(b$y, b$piece, function(y) diff(range(y)))
+  b$piece <- factor(b$piece, levels = names(sort(extent, decreasing = TRUE)))
+  b <- b[order(b$piece, b$order), ]
+  capital <- b[b$zone == "capital", ]
+  # Units with no published series (Sejong) are drawn white rather than as missing grey.
+  unpublished <- if (is.null(unit_values)) character() else unit_values$unit_code[!unit_values$published]
+  ggplot(b, aes(x, y, group = piece)) +
+    geom_polygon(data = b[b$zone == "non_capital", ], aes(fill = unit_value), colour = "white", linewidth = .25) +
+    geom_polygon(data = b[b$unit_code %in% unpublished, ], fill = "white",
+                 colour = quiet, linewidth = .25) +
+    geom_polygon(data = capital, fill = NA, colour = ink, linewidth = 1.1) +
+    geom_polygon(data = capital, aes(fill = unit_value), colour = NA) +
+    geom_polygon(data = capital, fill = NA, colour = "white", linewidth = .25) +
+    geom_label(data = labels, aes(x, y, label = label), inherit.aes = FALSE, size = 3.4,
+               lineheight = .9, linewidth = 0, fill = "white", alpha = .85, colour = ink) +
+    geom_text(data = titles, aes(x, y, label = label), inherit.aes = FALSE, fontface = "bold",
+              size = 4, colour = ink) +
+    scale_fill_gradient2(low = orange, mid = neutral, high = teal, midpoint = 0, limits = c(-limit, limit),
+                         oob = scales::squish, na.value = "#dedede") +
+    coord_fixed(clip = "off") +
+    labs(x = NULL, y = NULL, fill = unit) +
+    chart_theme + theme(axis.text = element_blank(), panel.grid.major = element_blank(),
+                        legend.key.width = grid::unit(3, "lines"))
 }
