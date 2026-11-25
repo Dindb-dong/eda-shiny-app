@@ -343,9 +343,18 @@ zone_map <- function(boundaries, values, unit, unit_values = NULL) {
     data.frame(x = mean(range(g$x)), y = max(g$y) + 1.1, label = g$country[1])))
   # A fixed ±50 scale keeps colours comparable from month to month while the slider plays.
   limit <- heatmap_clamp
+  # Boundaries keep outer rings only, so draw large pieces first and enclosed units
+  # (Daegu, Gwangju, Taipei, Chiayi City, ...) on top of the units around them.
+  extent <- tapply(b$x, b$piece, function(x) diff(range(x))) * tapply(b$y, b$piece, function(y) diff(range(y)))
+  b$piece <- factor(b$piece, levels = names(sort(extent, decreasing = TRUE)))
+  b <- b[order(b$piece, b$order), ]
   capital <- b[b$zone == "capital", ]
+  # Units with no published series (Sejong) are drawn white rather than as missing grey.
+  unpublished <- if (is.null(unit_values)) character() else unit_values$unit_code[!unit_values$published]
   ggplot(b, aes(x, y, group = piece)) +
     geom_polygon(data = b[b$zone == "non_capital", ], aes(fill = unit_value), colour = "white", linewidth = .25) +
+    geom_polygon(data = b[b$unit_code %in% unpublished, ], fill = "white",
+                 colour = quiet, linewidth = .25) +
     geom_polygon(data = capital, fill = NA, colour = ink, linewidth = 1.1) +
     geom_polygon(data = capital, aes(fill = unit_value), colour = NA) +
     geom_polygon(data = capital, fill = NA, colour = "white", linewidth = .25) +

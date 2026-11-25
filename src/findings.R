@@ -10,7 +10,7 @@ month_year <- function(date) paste(month.name[as.integer(format(date, "%m"))], f
 month_short <- function(month) month.abb[month %% 100]
 grey_bar <- "#bdbdbd"
 
-build_findings <- function(spending, covid, categories) {
+build_findings <- function(spending, covid, categories, units) {
   national <- subset(spending, capital_area == "national")
   label <- function(category) unname(categories[category])
   population <- c(Korea = covid_population[["KOR"]], Taiwan = covid_population[["TWN"]])
@@ -84,17 +84,35 @@ build_findings <- function(spending, covid, categories) {
   top <- peaks[!duplicated(peaks$country), ]
   top_grew <- tapply(peak_growth$yoy[peak_growth$month %in% top$month] > 0,
                      peak_growth$country[peak_growth$month %in% top$month], sum)
+  # Qualifier: Korea's first outbreak (Daegu and North Gyeongsang, March 2020), province level.
+  march <- function(rows) {
+    now <- aggregate(amount_local ~ unit, transform(rows[rows$month == 202003, ], unit = rows$unit_name[rows$month == 202003]), sum)
+    ago <- aggregate(amount_local ~ unit, transform(rows[rows$month == 201903, ], unit = rows$unit_name[rows$month == 201903]), sum)
+    setNames(100 * (now$amount_local / ago$amount_local[match(now$unit, ago$unit)] - 1), now$unit)
+  }
+  provinces <- march(units[units$country == "Korea" & units$unit_code != "other", ])
+  korea_march <- march(transform(national[national$country == "Korea", ], unit_name = "Korea"))[["Korea"]]
+  outbreak <- sprintf(paste(
+    "Nationally, spending did not follow case counts, but in March 2020 the provinces at the centre of Korea's first outbreak fell most: spending across the seven industries fell %.1f%% year over year in Daegu (the lowest of %d provinces) and %.1f%% in North Gyeongsang, against %.1f%% nationwide and %.1f%% in Seoul.",
+    "This is an association only; the app has no province-level case or restriction data."),
+    abs(provinces[["Daegu"]]), length(provinces), abs(provinces[["North Gyeongsang"]]), abs(korea_march),
+    abs(provinces[["Seoul"]]))
   cases_story <- list(
     headline = sprintf("Not case counts: in each country's three biggest case months, spending grew in %d of %d industry-months in Korea and %d of %d in Taiwan",
                        grew[["Korea"]], cells[["Korea"]], grew[["Taiwan"]], cells[["Taiwan"]]),
     takeaway = sprintf(paste(
       "The peaks were %s 2022 in Korea and %s 2022 in Taiwan. Food and dining grew year over year in %d of 12 months of 2022 in Korea and in all %d unmasked months in Taiwan, and moved with cases rather than against them (Spearman %+.2f and %+.2f).",
-      "Growth was not universal: in Korea's single largest month (%s) only %d of 7 industries grew. Taiwan's May–June 2022 figures (open circles) compare with its 2021 alert, so they are partly a rebound from a weak base."),
+      "Growth was not universal: in Korea's single largest month (%s) only %d of 7 industries grew. Taiwan's May–June 2022 figures (open circles) compare with its 2021 alert, so they are partly a rebound from a weak base.",
+      "%s"),
       peak_months[["Korea"]], peak_months[["Taiwan"]], food_up[["Korea"]], food_n[["Taiwan"]],
-      rho[["Korea"]], rho[["Taiwan"]], month_year(top$covid_date[top$country == "Korea"]), top_grew[["Korea"]]),
+      rho[["Korea"]], rho[["Taiwan"]], month_year(top$covid_date[top$country == "Korea"]), top_grew[["Korea"]], outbreak),
     checks = list(mostly_grew = all(grew / cells > .7), food_with_cases = all(rho > 0),
                   taiwan_food_all = food_up[["Taiwan"]] == food_n[["Taiwan"]],
-                  korea_food_mostly = food_up[["Korea"]] >= 10)
+                  korea_food_mostly = food_up[["Korea"]] >= 10,
+                  daegu_lowest = names(which.min(provinces)) == "Daegu",
+                  gyeongbuk_low = rank(provinces)[["North Gyeongsang"]] <= 3,
+                  outbreak_below_national = all(provinces[c("Daegu", "North Gyeongsang")] < korea_march)),
+    provinces = provinces, korea_march = korea_march
   )
   peak_growth$industry <- factor(label(peak_growth$category), levels = rev(unname(categories)))
   peak_growth$panel <- paste(peak_growth$country, "·", peak_months[peak_growth$country], "2022")

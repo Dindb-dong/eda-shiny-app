@@ -318,26 +318,51 @@ read_region_boundaries <- function(path = "data") {
   d[order(d$piece, d$order), ]
 }
 
-# Taiwan's 22 cities and counties from NCCC C02 (README.md). Unit totals must
-# reproduce the national, capital and non-capital series exactly.
-taiwan_capital_units <- c("TW-TPE", "TW-TPQ", "TW-KEE")
+# Taiwan's 22 cities and counties (NCCC C02) and Korea's 16 provinces plus "other"
+# (ECOS 601Y002 website export); see README.md. Taiwan's units reproduce the national,
+# capital and non-capital series exactly. Korea's file also carries ECOS's published
+# national total, which matches exactly, as do the capital provinces and "other"
+# (the existing unallocated series); ECOS's province figures do not add exactly to its
+# national total (up to 378 million won, 0.05%), so non-capital is checked within 0.1%.
+capital_units <- c("TW-TPE", "TW-TPQ", "TW-KEE", "KR-11", "KR-28", "KR-41")
 read_unit_spending <- function(spending, path = "data", industry = read_industry_crosswalk(path)) {
-  d <- read.csv(file.path(path, "card_spending_by_city_county_taiwan_2014_2022.csv"), fileEncoding = "UTF-8-BOM")
-  stopifnot(!anyDuplicated(d[c("month", "category", "unit_code")]), length(unique(d$unit_code)) == 22L,
+  read <- function(file) read.csv(file.path(path, file), fileEncoding = "UTF-8-BOM")
+  d <- rbind(read("card_spending_by_city_county_taiwan_2014_2022.csv"),
+             read("card_spending_by_province_korea_2014_2022.csv"))
+  units <- tapply(d$unit_code, d$country, function(x) length(unique(x)))
+  stopifnot(!anyDuplicated(d[c("country", "month", "category", "unit_code")]),
+            units[["Taiwan"]] == 22L, units[["Korea"]] == 18L, !"KR-50" %in% d$unit_code,
             setequal(d$category, industry$category), all(table(d$unit_code, d$category) == 108L),
-            all(is.finite(d$amount_local)), all(d$currency == "TWD"))
-  d$capital_area <- ifelse(d$unit_code %in% taiwan_capital_units, "capital", "non_capital")
-  for (zone in c("national", "capital", "non_capital")) {
-    units <- if (zone == "national") d else d[d$capital_area == zone, ]
-    total <- aggregate(amount_local ~ month + category, units, sum)
-    series <- spending[spending$country == "Taiwan" & spending$capital_area == zone, ]
-    matched <- merge(total, series[c("month", "category", "amount_local")], by = c("month", "category"))
-    stopifnot(nrow(matched) == 108L * 7L, all(matched$amount_local.x == matched$amount_local.y))
+            all(is.finite(d$amount_local)),
+            all(d$currency == ifelse(d$country == "Taiwan", "TWD", "KRW")))
+  d$capital_area <- ifelse(d$unit_code %in% capital_units, "capital",
+                           ifelse(d$unit_code == "other", "unallocated", "non_capital"))
+  d$capital_area[d$unit_code == "national"] <- "national"
+  compare <- function(country, rows, zone) {
+    total <- aggregate(amount_local ~ month + category, rows, sum)
+    series <- if (zone == "unallocated") {
+      z <- function(a) spending[spending$country == country & spending$capital_area == a, c("month", "category", "amount_local")]
+      m <- merge(merge(z("national"), z("capital"), by = c("month", "category")), z("non_capital"), by = c("month", "category"))
+      data.frame(m[c("month", "category")], amount_local = m$amount_local.x - m$amount_local.y - m$amount_local)
+    } else spending[spending$country == country & spending$capital_area == zone, c("month", "category", "amount_local")]
+    matched <- merge(total, series, by = c("month", "category"))
+    stopifnot(nrow(matched) == 108L * 7L)
+    matched$amount_local.x / matched$amount_local.y - 1
   }
+  taiwan <- d[d$country == "Taiwan", ]
+  korea <- d[d$country == "Korea", ]
+  stopifnot(all(compare("Taiwan", taiwan, "national") == 0),
+            all(compare("Taiwan", taiwan[taiwan$capital_area == "capital", ], "capital") == 0),
+            all(compare("Taiwan", taiwan[taiwan$capital_area == "non_capital", ], "non_capital") == 0),
+            all(compare("Korea", korea[korea$capital_area == "national", ], "national") == 0),
+            all(compare("Korea", korea[korea$capital_area == "capital", ], "capital") == 0),
+            all(compare("Korea", korea[korea$capital_area == "unallocated", ], "unallocated") == 0),
+            all(abs(compare("Korea", korea[korea$capital_area == "non_capital", ], "non_capital")) < .001))
+  d <- d[d$unit_code != "national", ]
   d$date <- as.Date(paste0(d$month, "01"), "%Y%m%d")
   d$month_id <- month_id(d$date)
   d$season <- as.integer(format(d$date, "%m"))
-  by_series(d, add_measures, keys = c("category", "unit_code"))
+  by_series(d, add_measures, keys = c("country", "category", "unit_code"))
 }
 
 # One row per country and zone: year-over-year growth for the chosen industry and month,

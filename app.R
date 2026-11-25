@@ -20,9 +20,9 @@ covid_daily <- read_covid_daily()
 covid <- summarize_covid_monthly(covid_daily)
 age_profile <- read_age_profile(industry = industry)
 card_comparison <- read_card_comparison()
-findings <- build_findings(spending, covid, categories)
 boundaries <- read_region_boundaries()
 unit_spending <- read_unit_spending(spending, industry = industry)
+findings <- build_findings(spending, covid, categories, unit_spending)
 map_months <- seq(as.Date("2020-01-01"), as.Date("2022-12-01"), by = "month")
 
 overview_views <- c(industry_growth = "Spending growth by area", industry_gap = "Capital–non-capital gap")
@@ -68,7 +68,7 @@ spending_choices <- c("Year-over-year growth" = "yoy", "2019 index" = "index",
 
 chart_notes <- c(
   industry_growth = "Each cell shows spending growth from the same month a year earlier. Orange indicates a decline and teal indicates growth. Colours stop at ±50%; larger values share the end colour. Grey Taiwan cells (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021.",
-  industry_map = "Fill shows spending growth from the same month a year earlier: by city and county for Taiwan, and by capital and non-capital zone for Korea, whose provincial series are not yet in the app. Labels give the zone values and the capital zone has a heavier outline. The colour scale is fixed at ±50%, so months can be compared while the slider plays and small counties with wild swings share the end colour. Grey Taiwan areas (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021. Matsu (Lienchiang County, non-capital) has spending data but no boundary polygon.",
+  industry_map = "Fill shows spending growth from the same month a year earlier for each Korean province and Taiwanese city or county, or for each capital and non-capital zone. Labels give the zone values and the capital zone has a heavier outline. Sejong is white because ECOS publishes no separate Sejong series. In March 2020 Daegu and North Gyeongsang, the centre of Korea’s first outbreak, fell most; the app has no province-level case or restriction data, so this is an association. The colour scale is fixed at ±50%, so months can be compared while the slider plays and small counties with wild swings share the end colour. Grey Taiwan areas (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021. Matsu (Lienchiang County, non-capital) has spending data but no boundary polygon.",
   industry_gap = "Each cell subtracts non-capital growth from capital-area growth in the same industry and month. Teal means growth was higher in the capital area. Colours stop at ±50 points. Grey Taiwan cells (Feb 2021 – Jan 2022) are masked because the source’s category mix shifts in Feb 2021.",
   scatter = "Each point is one spending month. The dashed line is linear. The purple line is a local linear fit (LOESS).",
   aligned = "Both series are standardized within their own paired window. The horizontal axis follows the spending month.",
@@ -133,7 +133,7 @@ relationship_ui <- tagList(
     tags$div(class = "filter-grid analysis-options",
       conditionalPanel("input.tab === 'overview' && input.overview_view === 'industry_map'", class = "sensitivity-option",
         # Date slider steps are in days; 31-day steps from 1 Jan 2020 land in each of the 36 months once.
-        selectInput("map_fill", "Map fill", c("Taiwan cities and counties, Korea zones" = "unit",
+        selectInput("map_fill", "Map fill", c("Provinces, cities and counties" = "unit",
                                               "Capital and non-capital zones" = "zone"), selectize = FALSE),
         sliderInput("map_month", "Month (press play to step through 2020–2022)", min = min(map_months),
                     max = max(map_months), value = as.Date("2020-03-01"), step = 31, timeFormat = "%b %Y",
@@ -241,9 +241,17 @@ server <- function(input, output, session) {
   })
   map_values <- reactive(zone_values(spending, covid, selected_countries(), req(input$category), map_month()))
   unit_values <- reactive({
-    if (!identical(input$map_fill, "unit") || !"Taiwan" %in% selected_countries()) return(NULL)
-    unit_spending[unit_spending$category == req(input$category) & unit_spending$month == map_month(),
-                  c("country", "unit_code", "unit_name", "capital_area", "yoy")]
+    if (!identical(input$map_fill, "unit")) return(NULL)
+    u <- unit_spending[unit_spending$country %in% selected_countries() & unit_spending$unit_code != "other" &
+                         unit_spending$category == req(input$category) & unit_spending$month == map_month(),
+                       c("country", "unit_code", "unit_name", "capital_area", "yoy")]
+    u$published <- TRUE
+    # ECOS publishes no separate Sejong series; show it unfilled rather than estimate it.
+    if ("Korea" %in% u$country) {
+      u <- rbind(u, data.frame(country = "Korea", unit_code = "KR-50", unit_name = "Sejong (not published separately)",
+                               capital_area = "non_capital", yoy = NA_real_, published = FALSE))
+    }
+    u
   })
   # Zone rows plus any city/county rows, for the summary table and CSV.
   map_table <- reactive({
@@ -252,7 +260,7 @@ server <- function(input, output, session) {
                         zone = v$capital_area, yoy_pct = v$yoy)
     u <- unit_values()
     units <- if (is.null(u)) zones[0, ] else
-      data.frame(level = "city_county", country = u$country, area = u$unit_name, unit_code = u$unit_code,
+      data.frame(level = "unit", country = u$country, area = u$unit_name, unit_code = u$unit_code,
                  zone = u$capital_area, yoy_pct = u$yoy)
     d <- rbind(zones, units)
     d$industry <- unname(categories[[req(input$category)]])
@@ -264,8 +272,11 @@ server <- function(input, output, session) {
   unit_extremes <- function(u) {
     u <- u[is.finite(u$yoy), ]
     if (is.null(u) || !nrow(u)) return("")
-    hi <- u[which.max(u$yoy), ]; lo <- u[which.min(u$yoy), ]
-    sprintf(". Taiwan cities and counties range from %s %+.1f%% to %s %+.1f%%", lo$unit_name, lo$yoy, hi$unit_name, hi$yoy)
+    paste0(". ", paste(vapply(split(u, u$country), function(g) {
+      hi <- g[which.max(g$yoy), ]; lo <- g[which.min(g$yoy), ]
+      sprintf("%s %s range from %s %+.1f%% to %s %+.1f%%", g$country[1],
+              if (g$country[1] == "Korea") "provinces" else "cities and counties", lo$unit_name, lo$yoy, hi$unit_name, hi$yoy)
+    }, character(1)), collapse = "; "))
   }
   map_label <- function(month) format(as.Date(paste0(month, "01"), "%Y%m%d"), "%b %Y")
   overview_unit <- reactive(if (active_view() == "industry_gap") "Gap (percentage points)" else "Growth (%)")
@@ -409,7 +420,7 @@ server <- function(input, output, session) {
     view <- active_view()
     if (view == "industry_map") {
       d <- map_table()
-      return(data.frame(Country = d$country, Level = ifelse(d$level == "zone", "Zone", "City or county"),
+      return(data.frame(Country = d$country, Level = ifelse(d$level == "zone", "Zone", "Province, city or county"),
                         Area = d$area, Industry = d$industry, Month = map_label(d$month), "YoY growth (%)" = d$yoy_pct,
                         "Stringency (national)" = d$stringency, "Cases per million (national)" = d$cases_per_million,
                         check.names = FALSE))

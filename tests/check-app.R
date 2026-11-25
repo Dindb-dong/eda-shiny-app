@@ -98,15 +98,34 @@ stopifnot(sum(units$country == "Korea") == 17L, sum(units$country == "Taiwan") =
           length(map_months) == 36L,
           identical(format(seq(min(map_months), by = 31, length.out = 36), "%Y%m"), format(map_months, "%Y%m")))
 # Taiwan city/county spending: 22 units, reconciled to the area series by the loader.
-stopifnot(nrow(unit_spending) == 22L * 7L * 108L, length(unique(unit_spending$unit_code)) == 22L,
-          "TW-LIE" %in% unit_spending$unit_code, !"TW-LIE" %in% boundaries$unit_code,
-          setequal(setdiff(unit_spending$unit_code, "TW-LIE"), units$unit_code[units$country == "Taiwan"]),
-          all(is.na(unit_spending$yoy[unit_spending$month %in% 202102:202201])),
-          all(is.na(unit_spending$monthly[unit_spending$month == 202102])),
-          all(is.finite(unit_spending$yoy[unit_spending$month == 202202 & unit_spending$unit_code != "TW-LIE"])))
+tw_units <- subset(unit_spending, country == "Taiwan")
+kr_units <- subset(unit_spending, country == "Korea")
+stopifnot(nrow(tw_units) == 22L * 7L * 108L, length(unique(tw_units$unit_code)) == 22L,
+          "TW-LIE" %in% tw_units$unit_code, !"TW-LIE" %in% boundaries$unit_code,
+          setequal(setdiff(tw_units$unit_code, "TW-LIE"), units$unit_code[units$country == "Taiwan"]),
+          all(is.na(tw_units$yoy[tw_units$month %in% 202102:202201])),
+          all(is.na(tw_units$monthly[tw_units$month == 202102])),
+          all(is.finite(tw_units$yoy[tw_units$month == 202202 & tw_units$unit_code != "TW-LIE"])))
+# Korea: 16 provinces plus ECOS "other" (no polygon); no separate Sejong series, which is a polygon.
+# The loader asserts national, capital and other exactly and non-capital within 0.1%.
+stopifnot(nrow(kr_units) == 17L * 7L * 108L, "other" %in% kr_units$unit_code, !"KR-50" %in% kr_units$unit_code,
+          setequal(setdiff(kr_units$unit_code, "other"), setdiff(units$unit_code[units$country == "Korea"], "KR-50")),
+          all(kr_units$capital_area[kr_units$unit_code == "other"] == "unallocated"),
+          all(is.finite(kr_units$yoy[kr_units$month >= 201501])))
+local({
+  provinces <- aggregate(amount_local ~ month + category, subset(kr_units, capital_area == "non_capital"), sum)
+  series <- subset(spending, country == "Korea" & capital_area == "non_capital")
+  gap <- provinces$amount_local / series$amount_local[match(paste(provinces$month, provinces$category),
+                                                            paste(series$month, series$category))] - 1
+  # The ECOS province figures differ from the derived non-capital series by at most 0.053%.
+  stopifnot(max(abs(gap)) < .00053, max(abs(gap)) > 0)
+})
+stopifnot(names(which.min(findings$cases$provinces)) == "Daegu",
+          grepl("fell 33.3% year over year in Daegu (the lowest of 16 provinces) and 23.2% in North Gyeongsang",
+                findings$cases$takeaway, fixed = TRUE))
 # The February 2021 step happens at once in every city and county.
 feb_ratio <- function(industry) {
-  d <- subset(unit_spending, category == industry & month %in% c(202101, 202102))
+  d <- subset(tw_units, category == industry & month %in% c(202101, 202102))
   w <- tapply(d$amount_local, list(d$unit_code, d$month), sum)
   w[, "202102"] / w[, "202101"]
 }
@@ -133,15 +152,20 @@ testServer(server, {
     u <- unit_values()
     expected <- subset(unit_spending, category == "food" & month == target)
     csv <- read.csv(output$download)
-    stopifnot(nrow(u) == 22L, identical(u$yoy, expected$yoy[match(u$unit_code, expected$unit_code)]),
-              nrow(csv) == 26L, sum(csv$level == "zone") == 4L, startsWith(output$chart$src, "data:image/png"),
-              grepl("City or county", output$summary, fixed = TRUE),
-              xor(grepl("range from", output$chart$alt, fixed = TRUE), target %in% 202102:202201))
+    shown <- u$published
+    stopifnot(nrow(u) == 22L + 16L + 1L, sum(!shown) == 1L, u$unit_code[!shown] == "KR-50", is.na(u$yoy[!shown]),
+              identical(u$yoy[shown], expected$yoy[match(paste(u$country, u$unit_code)[shown],
+                                                         paste(expected$country, expected$unit_code))]),
+              nrow(csv) == 4L + 39L, sum(csv$level == "zone") == 4L, startsWith(output$chart$src, "data:image/png"),
+              grepl("Province, city or county", output$summary, fixed = TRUE),
+              grepl("Korea provinces range from", output$chart$alt, fixed = TRUE),
+              xor(grepl("Taiwan cities and counties range from", output$chart$alt, fixed = TRUE), target %in% 202102:202201))
     session$setInputs(map_fill = "zone")
   }
   # June 2021 is inside Taiwan's masked window: both Taiwan zones are NA and say so.
   session$setInputs(map_month = as.Date("2021-06-01"), map_fill = "unit")
-  stopifnot(all(is.na(unit_values()$yoy)), all(is.na(map_values()$yoy[map_values()$country == "Taiwan"])),
+  stopifnot(all(is.na(unit_values()$yoy[unit_values()$country == "Taiwan"])),
+            all(is.na(map_values()$yoy[map_values()$country == "Taiwan"])),
             all(is.finite(map_values()$yoy[map_values()$country == "Korea"])),
             grepl("Taiwan capital area masked", output$chart$alt, fixed = TRUE))
   session$setInputs(map_month = as.Date("2020-01-01"), country = "Korea")
