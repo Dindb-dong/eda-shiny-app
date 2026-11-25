@@ -170,6 +170,7 @@ body {
 .table-scroll th { text-align: start; }
 .methods { border-block-start: 1px solid var(--line); padding-block: 1.25rem; color: var(--quiet); }
 .methods summary { color: var(--ink); cursor: pointer; font-weight: 650; margin-block-end: .8rem; }
+.findings-question { font-family: Georgia, "Times New Roman", serif; font-size: 2rem; line-height: 1.35; margin-block: 0 .8rem; text-wrap: balance; }
 .finding h2 { font-size: 2.1rem; text-wrap: balance; }
 .finding figure { margin: 0; }
 .finding figcaption, .finding > p { text-wrap: pretty; }

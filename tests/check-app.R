@@ -48,16 +48,37 @@ stopifnot(isTRUE(all.equal(parts$value[parts$component == "Trend"],
 # The joint section opens on Key findings.
 stopifnot(grepl('<li class="active">\\s*<a[^>]*data-value="findings"', as.character(relationship_ui)),
           identical(findings$survivors, "food"),
-          all(unlist(findings$paths$checks)), all(unlist(findings$food$checks)),
-          grepl("apparel and accessories fell most in Korea (-17.6%)", findings$industries$headline, fixed = TRUE),
-          grepl("health, education and recreation fell most in Taiwan (-35.3%)", findings$industries$headline, fixed = TRUE),
-          grepl("r = -0.70 over 36 months", findings$food$headline, fixed = TRUE),
-          grepl("r -0.70 → -0.46", findings$detrended$headline, fixed = TRUE),
-          grepl("from 14.9% to 9.3%", findings$`break`$headline, fixed = TRUE),
-          grepl("from 11.7% to 24.6%", findings$`break`$headline, fixed = TRUE),
+          all(vapply(finding_ids, function(id) all(unlist(findings[[id]]$checks)), logical(1))),
           !grepl("NA", findings$conclusion, fixed = TRUE))
+has <- function(id, text) grepl(text, findings[[id]]$headline, fixed = TRUE) || grepl(text, findings[[id]]$takeaway, fixed = TRUE)
+# (a) paths: Korea strict for 16 months, Taiwan for 3 in 2021; both case waves in 2022.
+stopifnot(has("paths", "(97.8% and 99.8% of all 2020–2022 cases)"),
+          has("paths", "Korea spent 16 months"), has("paths", "Taiwan spent 3, all in 2021"))
+# (b) part 1, not case counts: both countries' peak case months, growth counts and Spearman.
+stopifnot(has("cases", "17 of 21 industry-months in Korea and 18 of 21 in Taiwan"),
+          has("cases", "Mar, Apr, Aug 2022 in Korea and May, Jun, Oct 2022 in Taiwan"),
+          has("cases", "11 of 12 months of 2022 in Korea and in all 11 unmasked months in Taiwan"),
+          has("cases", "(Spearman +0.69 and +0.51)"), has("cases", "only 4 of 7 industries grew"),
+          all(findings$peak_growth$alert_base == (findings$peak_growth$country == "Taiwan" &
+                                                   findings$peak_growth$month %in% c(202205, 202206))))
+# (c) part 2, restrictions: Korea's strict months and Taiwan's alert, within-2021 comparison only.
+alert <- findings$alert
+stopifnot(has("restrictions", "food -10.2% year over year in strict months"),
+          has("restrictions", "r = -0.70 over 36 months"),
+          has("restrictions", "apparel and accessories -38.2% from April to June"),
+          isTRUE(all.equal(round(alert["apparel", "y2019"], 1), -3.2)),
+          identical(rownames(alert)[alert$difference <= -20], c("apparel", "health_education_leisure", "mobility")))
+# (d) and (e) part 3: uneven 2020 hit and what survives detrending.
+stopifnot(has("industries", "apparel and accessories fell 17.6% in Korea"),
+          has("industries", "health, education and recreation fell 35.3% while food and dining rose +20.4%"),
+          has("industries", "food and dining (-10.7%)"), has("industries", "vehicles and air travel (-14.5%)"),
+          has("detrended", "r -0.70 → -0.46"))
+# (f) caveat: Feb/Jan ratios move in opposite directions only in 2021.
+stopifnot(has("break", "fell to 0.48× January while general retail rose to 1.57×"),
+          has("break", "from 14.9% to 9.3%"), has("break", "from 11.7% to 24.6%"))
 testServer(server, {
   session$setInputs(tab = "findings")
+  stopifnot(startsWith(output$finding_restrictions_2$src, "data:image/png"))
   for (id in finding_ids) {
     plot <- output[[paste0("finding_", id)]]
     stopifnot(startsWith(plot$src, "data:image/png"), nchar(plot$alt) > 60,
@@ -312,4 +333,4 @@ testServer(covidTabServer, args = list(covid_daily = read_covid_daily()), {
   session$setInputs(metric = covid_metrics[["Reproduction rate (R)"]])
   stopifnot(nrow(plot_data()) > 2L, all(is.finite(plot_data()$value)))
 })
-cat(sprintf("All %d dashboard views and the five Key findings figures rendered. All seven regional industries, geography, leads, transforms, forecasts, CSV downloads and the COVID-19 comparison section verified.\n", length(view_names)))
+cat(sprintf("All %d dashboard views and the seven Key findings plots rendered. All seven regional industries, geography, leads, transforms, forecasts, CSV downloads and the COVID-19 comparison section verified.\n", length(view_names)))

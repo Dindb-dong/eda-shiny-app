@@ -88,9 +88,10 @@ add_measures <- function(g) {
     g$gap <- 100 * (amount / unname(median_by_month[as.character(g$season)]) - 1)
     if (g$country[1] == "Taiwan") {
       # NCCC's category mix shifts abruptly in February 2021 (food falls by half and
-      # general retail jumps in the same month), consistent with a merchant
-      # reclassification. Change measures whose endpoints straddle that month are
-      # artifacts, so mask them in every category; level measures cannot be repaired.
+      # general retail jumps in the same month, in every city and county). The source
+      # gives no notice of a change, but the pattern matches a merchant-to-industry
+      # mapping change, so change measures whose endpoints straddle that month are
+      # masked in every category; level measures cannot be repaired.
       straddles <- g$month >= 202102 & g$month <= 202201
       g$yoy[straddles] <- NA
       g$seasonal[straddles] <- NA
