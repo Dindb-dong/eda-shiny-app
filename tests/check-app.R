@@ -253,4 +253,4 @@ testServer(covidTabServer, args = list(covid_daily = read_covid_daily()), {
   session$setInputs(metric = covid_metrics[["Reproduction rate (R)"]])
   stopifnot(nrow(plot_data()) > 2L, all(is.finite(plot_data()$value)))
 })
-cat(sprintf("All %d dashboard views rendered. All seven regional industries, geography, leads, transforms, forecasts, CSV downloads and the COVID-19 comparison section verified.\n", length(view_names)))
+cat(sprintf("All %d dashboard views and the five Key findings figures rendered. All seven regional industries, geography, leads, transforms, forecasts, CSV downloads and the COVID-19 comparison section verified.\n", length(view_names)))
