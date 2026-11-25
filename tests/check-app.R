@@ -44,6 +44,30 @@ stopifnot(isTRUE(all.equal(parts$value[parts$component == "Trend"],
                           as.numeric(expected_parts[, "seasonal"]))),
           isTRUE(all.equal(rowSums(matrix(parts$value, ncol = 3)), log(korea$amount_local))))
 
+# Key findings: the landing view, with headlines generated from the final data.
+# The joint section opens on Key findings.
+stopifnot(grepl('<li class="active">\\s*<a[^>]*data-value="findings"', as.character(relationship_ui)),
+          identical(findings$survivors, "food"),
+          all(unlist(findings$paths$checks)), all(unlist(findings$food$checks)),
+          grepl("apparel and accessories fell most in Korea (-17.6%)", findings$industries$headline, fixed = TRUE),
+          grepl("health, education and recreation fell most in Taiwan (-35.3%)", findings$industries$headline, fixed = TRUE),
+          grepl("r = -0.70 over 36 months", findings$food$headline, fixed = TRUE),
+          grepl("r -0.70 → -0.46", findings$detrended$headline, fixed = TRUE),
+          grepl("from 14.9% to 9.3%", findings$`break`$headline, fixed = TRUE),
+          grepl("from 11.7% to 24.6%", findings$`break`$headline, fixed = TRUE),
+          !grepl("NA", findings$conclusion, fixed = TRUE))
+testServer(server, {
+  session$setInputs(tab = "findings")
+  for (id in finding_ids) {
+    plot <- output[[paste0("finding_", id)]]
+    stopifnot(startsWith(plot$src, "data:image/png"), nchar(plot$alt) > 60,
+              nzchar(output[[paste0("finding_", id, "_headline")]]),
+              grepl("<table", output[[paste0("finding_", id, "_table")]], fixed = TRUE))
+  }
+  csv <- read.csv(output$findings_download)
+  stopifnot(setequal(csv$finding, finding_ids), nzchar(output$findings_conclusion))
+})
+
 # The overview exports the values represented by each heatmap tile.
 testServer(server, {
   session$setInputs(tab = "overview", country = "both", overview_view = "industry_growth",
@@ -104,15 +128,15 @@ testServer(server, {
     session$setInputs(spending_view = view)
     assert_chart()
   }
-  session$setInputs(spending_view = "backtest")
+  session$setInputs(tab = "diagnostics", diagnostic_view = "backtest")
   stopifnot(all(holdout()$date >= as.Date("2019-01-01") & holdout()$date < onset),
             all(forecast_accuracy(holdout())$Months == 12),
             all(is.finite(holdout()$prediction)))
-  session$setInputs(spending_view = "forecast")
+  session$setInputs(diagnostic_view = "forecast")
   stopifnot(all(predicted()$date >= onset), all(is.finite(predicted()$prediction)))
-  session$setInputs(spending_view = "break_model")
+  session$setInputs(diagnostic_view = "break_model")
   stopifnot(all(is.finite(segmented()$segmented)), all(abs(segmented()$phi) < 1))
-  session$setInputs(period = "since_covid_onset", spending_view = "timeline")
+  session$setInputs(tab = "spending", period = "since_covid_onset", spending_view = "timeline")
   stopifnot(all(shown_spending()$date >= onset), nrow(shown_spending()) == 144L,
             identical(is.finite(shown_spending()$value),
                       !(shown_spending()$country == "Taiwan" & shown_spending()$month %in% 202102:202201)))
@@ -136,7 +160,7 @@ testServer(server, {
             identical(downloaded$month, paired()$month))
   session$setInputs(country = "both", area = "both", metric = "stringency",
                     lead = "0", age_view = "age_observed")
-  session$setInputs(tab = "spending", spending_view = "forecast", category = "retail_broad",
+  session$setInputs(tab = "diagnostics", diagnostic_view = "forecast", category = "retail_broad",
                     country = "Taiwan", area = "capital")
   stopifnot(all(is.finite(predicted()$prediction)),
             setequal(predicted()$model, c("Seasonal naïve", "Holt–Winters", "SARIMA")))

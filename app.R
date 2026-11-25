@@ -11,6 +11,7 @@ source("src/covid_data.R", local = TRUE)
 source("src/covid_section.R", local = TRUE)
 source("src/covid_exploration.R", local = TRUE)
 source("src/card_section.R", local = TRUE)
+source("src/findings.R", local = TRUE)
 
 industry <- read_industry_crosswalk()
 categories <- setNames(industry$label_en, industry$category)
@@ -19,6 +20,7 @@ covid_daily <- read_covid_daily()
 covid <- summarize_covid_monthly(covid_daily)
 age_profile <- read_age_profile(industry = industry)
 card_comparison <- read_card_comparison()
+findings <- build_findings(spending, covid, categories)
 
 overview_views <- c(industry_growth = "Spending growth by area", industry_gap = "Capital–non-capital gap")
 relationship_views <- c(scatter = "Monthly scatter", aligned = "Aligned timeline",
@@ -27,9 +29,11 @@ relationship_views <- c(scatter = "Monthly scatter", aligned = "Aligned timeline
                         outcomes = "Spending outcomes by restriction band", binary = "Logistic curve for spending declines")
 spending_views <- c(timeline = "Monthly timeline", heatmap = "Calendar heatmap",
                     distribution = "Empirical distribution (ECDF)", box = "Pre/post boxplots",
-                    projection = "Pre-COVID trend projection", backtest = "2019 forecast backtest",
-                    forecast = "Pre-COVID forecast comparison", break_model = "Segmented trend with AR(1) errors")
-diagnostic_views <- c(stl = "Robust seasonal decomposition (STL)", acf = "Autocorrelation (ACF)",
+                    projection = "Pre-COVID trend projection")
+# Appendix: forecasting, break models and diagnostics, kept for method checks.
+diagnostic_views <- c(backtest = "2019 forecast backtest",
+                      forecast = "Pre-COVID forecast comparison", break_model = "Segmented trend with AR(1) errors",
+                      stl = "Robust seasonal decomposition (STL)", acf = "Autocorrelation (ACF)",
                       pacf = "Partial autocorrelation (PACF)", qq = "Normal Q–Q plot",
                       quantiles = "Before vs. since onset Q–Q", quantile_diff = "Quantile mean–difference",
                       spread = "Annual location–spread", boxcox = "Box–Cox profile",
@@ -39,6 +43,16 @@ age_views <- c(age_observed = "Observed mean ticket by age and month",
                age_compare = "Ordinary and robust bivariate LOESS",
                age_residual = "Robust LOESS residual map")
 view_names <- c(overview_views, relationship_views, spending_views, diagnostic_views, age_views)
+# Chart headings say what to look for; the selector keeps the short method names.
+view_titles <- c(
+  industry_growth = "Which industries fell or grew, month by month",
+  industry_gap = "Where capital-area growth ran ahead of the rest of the country",
+  scatter = "Does spending move with the COVID-19 measure?",
+  lags = "Does the COVID-19 measure lead spending by a few months?",
+  adjusted = "Does the link survive once trend and season are removed?",
+  timeline = "How spending moved before and since onset",
+  projection = "How far spending departed from its pre-COVID trend",
+  forecast = "How far spending departed from pre-COVID forecasts")
 paired_diagnostics <- c("residuals", "cook", "fitted_resid")
 fixed_stringency <- c("outcomes", "binary")
 forecast_views <- c("forecast", "backtest")
@@ -85,75 +99,78 @@ chart_notes <- c(
 uses_covid_options <- "input.tab === 'relationship' || (input.tab === 'diagnostics' && ['residuals','cook','fitted_resid'].includes(input.diagnostic_view))"
 
 relationship_ui <- tagList(
-  tabsetPanel(id = "tab", selected = "overview",
+  tabsetPanel(id = "tab", selected = "findings",
+    tabPanel("Key findings", value = "findings", findings_ui()),
     tabPanel("Industry overview", value = "overview"),
     tabPanel("Relationship", value = "relationship"),
     tabPanel("Before and since onset", value = "spending"),
-    tabPanel("Diagnostics", value = "diagnostics"),
-    tabPanel("Taiwan age profile", value = "age")),
-  tags$div(class = "filter-grid main-filters",
-    conditionalPanel("input.tab !== 'age'",
-      selectInput("country", "Country", c("Korea and Taiwan" = "both", "Korea", "Taiwan"), selectize = FALSE)),
-    conditionalPanel("!['age','overview'].includes(input.tab)",
-      selectInput("area", "Geography", c(choices(areas), "Capital and non-capital areas" = "both"), selectize = FALSE)),
-    conditionalPanel("input.tab !== 'overview'",
-      selectInput("category", "Card category", choices(categories), selectize = FALSE)),
-    conditionalPanel("!['age','overview'].includes(input.tab)",
-      selectInput("measure", "Spending measure", spending_choices, selectize = FALSE)),
+    tabPanel("Taiwan age profile", value = "age"),
+    tabPanel("Appendix: models and diagnostics", value = "diagnostics")),
+  conditionalPanel("input.tab !== 'findings'",
+    tags$div(class = "filter-grid main-filters",
+      conditionalPanel("input.tab !== 'age'",
+        selectInput("country", "Country", c("Korea and Taiwan" = "both", "Korea", "Taiwan"), selectize = FALSE)),
+      conditionalPanel("!['age','overview'].includes(input.tab)",
+        selectInput("area", "Geography", c(choices(areas), "Capital and non-capital areas" = "both"), selectize = FALSE)),
+      conditionalPanel("input.tab !== 'overview'",
+        selectInput("category", "Card category", choices(categories), selectize = FALSE)),
+      conditionalPanel("!['age','overview'].includes(input.tab)",
+        selectInput("measure", "Spending measure", spending_choices, selectize = FALSE)),
+      conditionalPanel("input.tab === 'overview'",
+        selectInput("overview_view", "View",
+                    c("Growth by area" = "industry_growth", "Capital area gap" = "industry_gap"),
+                    selectize = FALSE)),
+      conditionalPanel("input.tab === 'overview'",
+        selectInput("overview_period", "Spending period",
+                    c("2020–2022" = "since_covid_onset", "2015–2019" = "pre_covid", "2015–2022" = "all"),
+                    selectize = FALSE))),
+    tags$div(class = "filter-grid analysis-options",
+      conditionalPanel("input.tab === 'relationship'",
+        selectInput("relationship_view", "View", choices(relationship_views), selectize = FALSE)),
+      conditionalPanel("input.tab === 'spending'",
+        selectInput("spending_view", "View", choices(spending_views), selectize = FALSE)),
+      conditionalPanel("input.tab === 'spending'",
+        selectInput("period", "Spending period", c("Both periods" = "all", "Before onset · 2014–2019" = "pre_covid",
+                    "Since onset · 2020–2022" = "since_covid_onset"), selectize = FALSE)),
+      conditionalPanel("input.tab === 'diagnostics'",
+        selectInput("diagnostic_view", "View", choices(diagnostic_views), selectize = FALSE)),
+      conditionalPanel("input.tab === 'age'",
+        selectInput("age_view", "View", choices(age_views), selectize = FALSE)),
+      conditionalPanel(paste0("(", uses_covid_options, ") && (input.tab !== 'relationship' || !['outcomes','binary'].includes(input.relationship_view))"),
+        selectInput("metric", "COVID-19 measure", choices(covid_measures), selected = "stringency", selectize = FALSE)),
+      conditionalPanel(paste0("(", uses_covid_options, ") && (input.tab !== 'relationship' || input.relationship_view !== 'lags')"),
+        selectInput("lead", "COVID-19 leads spending", c("Same month" = 0, "1 month" = 1, "2 months" = 2, "3 months" = 3),
+                    selectize = FALSE))),
+    tags$section(class = "analysis-section", "aria-labelledby" = "chart-title",
+      tags$h2(id = "chart-title", textOutput("title", inline = TRUE)),
+      tags$p(class = "chart-note", textOutput("note", inline = TRUE)),
+      plotOutput("chart", height = "auto"),
+      tags$p(class = "coverage", textOutput("coverage", inline = TRUE))),
     conditionalPanel("input.tab === 'overview'",
-      selectInput("overview_view", "View",
-                  c("Growth by area" = "industry_growth", "Capital area gap" = "industry_gap"),
-                  selectize = FALSE)),
-    conditionalPanel("input.tab === 'overview'",
-      selectInput("overview_period", "Spending period",
-                  c("2020–2022" = "since_covid_onset", "2015–2019" = "pre_covid", "2015–2022" = "all"),
-                  selectize = FALSE))),
-  tags$div(class = "filter-grid analysis-options",
-    conditionalPanel("input.tab === 'relationship'",
-      selectInput("relationship_view", "View", choices(relationship_views), selectize = FALSE)),
-    conditionalPanel("input.tab === 'spending'",
-      selectInput("spending_view", "View", choices(spending_views), selectize = FALSE)),
-    conditionalPanel("input.tab === 'spending' && !['forecast','backtest','break_model'].includes(input.spending_view)",
-      selectInput("period", "Spending period", c("Both periods" = "all", "Before onset · 2014–2019" = "pre_covid",
-                  "Since onset · 2020–2022" = "since_covid_onset"), selectize = FALSE)),
-    conditionalPanel("input.tab === 'diagnostics'",
-      selectInput("diagnostic_view", "View", choices(diagnostic_views), selectize = FALSE)),
-    conditionalPanel("input.tab === 'age'",
-      selectInput("age_view", "View", choices(age_views), selectize = FALSE)),
-    conditionalPanel(paste0("(", uses_covid_options, ") && (input.tab !== 'relationship' || !['outcomes','binary'].includes(input.relationship_view))"),
-      selectInput("metric", "COVID-19 measure", choices(covid_measures), selected = "stringency", selectize = FALSE)),
-    conditionalPanel(paste0("(", uses_covid_options, ") && (input.tab !== 'relationship' || input.relationship_view !== 'lags')"),
-      selectInput("lead", "COVID-19 leads spending", c("Same month" = 0, "1 month" = 1, "2 months" = 2, "3 months" = 3),
-                  selectize = FALSE))),
-  tags$section(class = "analysis-section", "aria-labelledby" = "chart-title",
-    tags$h2(id = "chart-title", textOutput("title", inline = TRUE)),
-    tags$p(class = "chart-note", textOutput("note", inline = TRUE)),
-    plotOutput("chart", height = "auto"),
-    tags$p(class = "coverage", textOutput("coverage", inline = TRUE))),
-  conditionalPanel("input.tab === 'overview'",
-    tags$section(class = "analysis-section", "aria-labelledby" = "industry-detail-title",
-      tags$h2(id = "industry-detail-title", "Explore an industry"),
-      tags$div(class = "filter-grid analysis-options industry-detail-controls",
-        selectInput("detail_category", "Industry for detail", choices(categories), selectize = FALSE),
-        selectInput("detail_view", "Detail view", c("COVID-19 scatterplot" = "relationship",
-                                                    "Spending timeline" = "spending"), selectize = FALSE),
-        actionButton("open_industry_detail", "Open detail", class = "industry-detail-button")))),
-  tags$section(class = "analysis-section", "aria-labelledby" = "summary-title",
-    tags$div(class = "section-header",
-      tags$h2(id = "summary-title", textOutput("summary_title", inline = TRUE)),
-      downloadLink("download", "Download CSV")),
-    tags$div(class = "table-scroll", tabindex = "0", role = "region", "aria-label" = "Scrollable summary table",
-             tableOutput("summary")),
-    conditionalPanel("input.tab === 'relationship'",
-      tags$p(class = "coverage", "Pearson and Spearman describe the chosen pairs. Adjusted Pearson uses the two detrended series. Decline counts refer to negative year-over-year growth."))),
-  tags$details(class = "methods",
-    tags$summary("Data and interpretation"),
-    tags$p("Cases and deaths are daily reports summed by month. Negative reporting adjustments are retained. Stringency is averaged by month. Count plots use an inverse hyperbolic sine scale, which retains zeros."),
-    tags$p("The nationwide spending totals include unassigned amounts. Capital and non-capital series exclude them. Korea uses Seoul, Incheon, and Gyeonggi. Taiwan uses Taipei, New Taipei, and Keelung."),
-    tags$p("Spending amounts are nominal and source coverage varies by country and category. The 2019 index uses each series’ own 2019 average. The same-month median uses 2014–2019. Growth and differences are calculated before filtering by period."),
-    tags$p("Taiwan’s NCCC category mix shifts abruptly in February 2021: food falls from about 38.7 to 18.7 billion TWD between January and February while general retail rises from 29.2 to 45.9 billion. This is consistent with a source reclassification of merchants rather than a COVID-19 effect. Every Taiwan change measure whose two months straddle the shift is therefore left missing: year-over-year growth and the 12-month log difference for February 2021 – January 2022, month-over-month growth for February 2021, and the combined difference wherever an input is missing. The 2019 index and the pre-COVID gap are level measures that cannot be repaired, so read Taiwan’s levels across February 2021 with caution."),
-    tags$p("Industry categories use each source’s definitions. Lodging, vehicles and source-defined Other are best read within each country. National COVID-19 measures are shared by both spending areas."),
-    tags$p("The joined series has at most 36 months (January 2020 – December 2022) per country and region; January 2020 has stringency but no complete case or death counts. Shared trends, extreme months, and serial dependence can drive the fitted patterns. These charts describe associations."))
+      tags$section(class = "analysis-section", "aria-labelledby" = "industry-detail-title",
+        tags$h2(id = "industry-detail-title", "Explore an industry"),
+        tags$div(class = "filter-grid analysis-options industry-detail-controls",
+          selectInput("detail_category", "Industry for detail", choices(categories), selectize = FALSE),
+          selectInput("detail_view", "Detail view", c("COVID-19 scatterplot" = "relationship",
+                                                      "Spending timeline" = "spending"), selectize = FALSE),
+          actionButton("open_industry_detail", "Open detail", class = "industry-detail-button")))),
+    tags$section(class = "analysis-section", "aria-labelledby" = "summary-title",
+      tags$div(class = "section-header",
+        tags$h2(id = "summary-title", textOutput("summary_title", inline = TRUE)),
+        downloadLink("download", "Download CSV")),
+      tags$div(class = "table-scroll", tabindex = "0", role = "region", "aria-label" = "Scrollable summary table",
+               tableOutput("summary")),
+      conditionalPanel("input.tab === 'relationship'",
+        tags$p(class = "coverage", "Pearson and Spearman describe the chosen pairs. Adjusted Pearson uses the two detrended series. Decline counts refer to negative year-over-year growth."))),
+    tags$details(class = "methods",
+      tags$summary("Data and interpretation"),
+      tags$p("Cases and deaths are daily reports summed by month. Negative reporting adjustments are retained. Stringency is averaged by month. Count plots use an inverse hyperbolic sine scale, which retains zeros."),
+      tags$p("The nationwide spending totals include unassigned amounts. Capital and non-capital series exclude them. Korea uses Seoul, Incheon, and Gyeonggi. Taiwan uses Taipei, New Taipei, and Keelung."),
+      tags$p("Spending amounts are nominal and source coverage varies by country and category. The 2019 index uses each series’ own 2019 average. The same-month median uses 2014–2019. Growth and differences are calculated before filtering by period."),
+      tags$p("Taiwan’s NCCC category mix shifts abruptly in February 2021: food falls from about 38.7 to 18.7 billion TWD between January and February while general retail rises from 29.2 to 45.9 billion. This is consistent with a source reclassification of merchants rather than a COVID-19 effect. Every Taiwan change measure whose two months straddle the shift is therefore left missing: year-over-year growth and the 12-month log difference for February 2021 – January 2022, month-over-month growth for February 2021, and the combined difference wherever an input is missing. The 2019 index and the pre-COVID gap are level measures that cannot be repaired, so read Taiwan’s levels across February 2021 with caution."),
+      tags$p("Industry categories use each source’s definitions. Lodging, vehicles and source-defined Other are best read within each country. National COVID-19 measures are shared by both spending areas."),
+      tags$p("Appendix views fit forecasting, break and diagnostic models. They check the methods behind the main tabs rather than add findings."),
+      tags$p("The joined series has at most 36 months (January 2020 – December 2022) per country and region; January 2020 has stringency but no complete case or death counts. Shared trends, extreme months, and serial dependence can drive the fitted patterns. These charts describe associations.")))
 )
 
 ui <- fluidPage(
@@ -193,7 +210,10 @@ server <- function(input, output, session) {
   covid_section_server("covid_daily", covid_daily)
   card_section_server("card_comparison", card_comparison)
 
+  findings_server(input, output, findings)
+
   active_view <- reactive(switch(req(input$tab),
+    findings = req(FALSE),
     overview = req(input$overview_view),
     relationship = req(input$relationship_view), spending = req(input$spending_view),
     diagnostics = req(input$diagnostic_view), age = req(input$age_view)))
@@ -271,7 +291,7 @@ server <- function(input, output, session) {
     list(columns = columns, height = if (active_view() == "stl") max(525, rows * 155 + 45) else 300 * rows + 40)
   })
 
-  output$title <- renderText(view_names[[active_view()]])
+  output$title <- renderText(if (active_view() %in% names(view_titles)) view_titles[[active_view()]] else view_names[[active_view()]])
   output$note <- renderText(chart_notes[[active_view()]])
   output$summary_title <- renderText({
     if (active_view() == "industry_gap") "Summary by country and industry" else "Summary by country and area"
