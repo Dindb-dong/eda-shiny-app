@@ -1,5 +1,16 @@
 source("app.R")
 
+# Capital and non-capital cases (March 2020 – December 2022) cover nearly all national cases;
+# the rest are Korea's quarantine-station cases and Taiwan's imported cases without a county.
+zone_total <- tapply(covid_area$cases[covid_area$capital_area != "national" & covid_area$month_id >= 24243],
+                     covid_area$country[covid_area$capital_area != "national" & covid_area$month_id >= 24243], sum)
+national_total <- tapply(covid$cases[covid$month_id >= 24243], covid$country[covid$month_id >= 24243], sum)
+stopifnot(nrow(covid_area) == 216L, all(abs(zone_total / national_total - 1) < .01),
+          identical(sort(unique(covid_area$month_id[is.finite(covid_area$level)])), 24247:24262),
+          all(covid_area$country[is.finite(covid_area$level)] == "Korea"))
+# Zone rates use the fixed December 2021 zone populations.
+dec2020 <- subset(covid_area, country == "Korea" & capital_area == "capital" & month_id == 24252)
+stopifnot(dec2020$cases == 19223, isTRUE(all.equal(dec2020$cases_per_million, 19223 / 26023283 * 1e6)))
 stopifnot(length(categories) == 7L, nrow(spending) == 4536L, nrow(covid) == 72L,
           all(table(spending$country, spending$category, spending$capital_area) == 108L),
           all(table(age_profile$category) == 576L))
@@ -262,6 +273,21 @@ testServer(server, {
   downloaded <- read.csv(output$download)
   stopifnot(nrow(downloaded) == 22L, all(downloaded$covid_measure == "cases"),
             identical(downloaded$month, paired()$month))
+  # Zone panels pair with their own zone's cases, not the national count.
+  zone <- subset(covid_area, country == "Taiwan" & capital_area == "capital")
+  stopifnot(all(paired()$cases == zone$cases[match(paired()$covid_month_id, zone$month_id)]),
+            all(paired()$cases < covid$cases[match(paste("Taiwan", paired()$covid_month_id),
+                                                   paste(covid$country, covid$month_id))]))
+  # Distancing levels exist only for Korea's two zones, July 2020 – October 2021.
+  session$setInputs(country = "both", area = "both", metric = "level", category = "food")
+  stopifnot(all(paired()$country == "Korea"), identical(as.integer(table(paired()$capital_area)), c(16L, 16L)),
+            all(paired()$x == paired()$level))
+  for (view in c("scatter", "aligned", "lags", "adjusted")) {
+    session$setInputs(relationship_view = view)
+    assert_chart()
+  }
+  session$setInputs(relationship_view = "scatter", area = "national")
+  stopifnot(inherits(tryCatch(paired(), error = identity), "error"))
   session$setInputs(country = "both", area = "both", metric = "stringency",
                     lead = "0", age_view = "age_observed")
   session$setInputs(tab = "diagnostics", diagnostic_view = "forecast", category = "retail_broad",

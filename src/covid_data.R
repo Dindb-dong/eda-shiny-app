@@ -55,3 +55,56 @@ summarize_covid_monthly <- function(d) {
   })
   do.call(rbind, d)
 }
+
+# Capital and non-capital confirmed cases (README.md). A month's count is the change in
+# cumulative cases between month ends, so it needs both month ends.
+read_zone_cases <- function(path = "data") {
+  d <- read.csv(file.path(path, "covid_cases_by_capital_area_2020_2022.csv"), fileEncoding = "UTF-8-BOM")
+  d$date <- as.Date(d$date)
+  stopifnot(!anyDuplicated(d[c("country", "date", "capital_area")]), setequal(d$country, unname(countries)),
+            setequal(d$capital_area, c("capital", "non_capital", "unallocated")),
+            all(table(d$country, d$capital_area) == 1096L), all(d$new_confirmed >= 0, na.rm = TRUE))
+  ends <- d[d$date == as.Date(format(d$date + 1, "%Y-%m-01")) - 1, ]
+  ends$month_id <- month_id(ends$date)
+  ends <- ends[order(ends$country, ends$capital_area, ends$date), ]
+  ends$cases <- ave(ends$cumulative_confirmed, ends$country, ends$capital_area, FUN = function(x) c(NA, diff(x)))
+  ends <- ends[ends$capital_area != "unallocated", c("country", "capital_area", "month_id", "cases")]
+  # Fixed December 2021 zone populations (README.md), like the national denominators.
+  population <- read.csv(file.path(path, "population_by_capital_area_2021.csv"), fileEncoding = "UTF-8-BOM")
+  stopifnot(nrow(population) == 4L, !anyDuplicated(population[c("country", "capital_area")]),
+            all(population$population > 0))
+  at <- match(paste(ends$country, ends$capital_area), paste(population$country, population$capital_area))
+  stopifnot(!anyNA(at))
+  ends$cases_per_million <- ends$cases / population$population[at] * 1e6
+  ends
+}
+
+# Korea's published distancing level per zone (README.md), as each month's day-weighted
+# mean. Months with any day outside a level scheme stay missing.
+read_distancing_levels <- function(path = "data") {
+  d <- read.csv(file.path(path, "korea_distancing_levels_by_capital_area_2020_2022.csv"),
+                fileEncoding = "UTF-8-BOM", colClasses = "character")
+  d$start_date <- as.Date(d$start_date)
+  d$end_date <- as.Date(d$end_date)
+  days <- do.call(rbind, lapply(seq_len(nrow(d)), function(i) {
+    data.frame(capital_area = d$zone[i], date = seq(d$start_date[i], d$end_date[i], by = "day"),
+               level = suppressWarnings(as.numeric(d$level[i])))
+  }))
+  stopifnot(setequal(d$zone, c("capital", "non_capital")), !anyDuplicated(days[c("capital_area", "date")]),
+            all(table(days$capital_area) == as.integer(max(d$end_date) - min(d$start_date)) + 1L),
+            all(is.na(days$level) == !nzchar(d$level[rep(seq_len(nrow(d)), d$end_date - d$start_date + 1L)])))
+  days$month_id <- month_id(days$date)
+  monthly <- aggregate(level ~ capital_area + month_id, days, mean, na.action = na.pass)
+  monthly$country <- "Korea"
+  monthly
+}
+
+# National monthly rows plus capital and non-capital rows. Zone rows carry their own
+# cases and Korea's zone distancing level; deaths and stringency stay national.
+covid_by_area <- function(covid, zone_cases, levels) {
+  national <- transform(covid, capital_area = "national", level = NA_real_,
+                        cases_per_million = cases / unname(covid_population[ifelse(country == "Korea", "KOR", "TWN")]) * 1e6)
+  zones <- merge(covid[setdiff(names(covid), "cases")], zone_cases, by = c("country", "month_id"))
+  zones <- merge(zones, levels, by = c("country", "capital_area", "month_id"), all.x = TRUE)
+  rbind(national, zones[names(national)])
+}
