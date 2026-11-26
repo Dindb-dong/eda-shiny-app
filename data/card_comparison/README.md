@@ -1,6 +1,6 @@
 # Nationwide card comparison inputs
 
-These three CSVs are copied without alteration from the `shiny_card_app.4.zip` attachment to [PR #5](https://github.com/Dindb-dong/eda-shiny-app/pull/5), supplied on 23 November 2026.
+These three CSVs come from the `shiny_card_app.4.zip` attachment to [PR #5](https://github.com/Dindb-dong/eda-shiny-app/pull/5), supplied on 23 November 2026. `korea_en_on_off.csv` has one later change, described below; the other two files are unaltered.
 
 | File | Contents | Supplied coverage |
 | :-- | :-- | :-- |
@@ -10,16 +10,18 @@ These three CSVs are copied without alteration from the `shiny_card_app.4.zip` a
 
 The supplied README identifies Taiwan card spending as National Credit Card Center (NCCC) national and e-commerce data. It leaves the Korea card and CPI source references unspecified; those still need to be added by the data contributor.
 
-The Korea categories match sums of ECOS `601Y002` consumption-type codes in [`korea_national_2019_2022.csv`](../korea_national_2019_2022.csv) for every month from January 2019 to December 2022 (largest difference 1 million won, from rounding). The contributor confirmed that e-commerce was separated on purpose because Taiwan's category amounts include online spending.
+The supplied Korea categories matched sums of ECOS `601Y002` consumption-type codes in [`korea_national_2019_2022.csv`](../korea_national_2019_2022.csv) for every month from January 2019 to December 2022 (largest difference 1 million won, from rounding). The contributor confirmed that e-commerce was separated on purpose because Taiwan's category amounts include online spending.
+
+On 26 November 2026 the team agreed to count convenience stores (1140) as department stores rather than food. The `FD` and `DP` rows (total and offline amounts) were updated by subtracting and adding the national 1140 monthly total retrieved from the ECOS Open API (`StatisticSearch/601Y002/M/X/1140/TOT`, million won converted to won) for January 2014 – August 2023. The retrieved series equals the repository's 2019–2022 1140 values exactly, and the new `FD` and `DP` equal the national `food` and `retail_broad` series in `card_spending_by_province_korea_2014_2022.csv` for 2014–2022 within 1 million won. The table shows the current codes.
 
 | Code | Korea consumption types (ECOS code) |
 | :-- | :-- |
-| `FD` | Groceries (1300) + restaurants (2220) + convenience stores (1140) |
+| `FD` | Groceries (1300) + restaurants (2220) |
 | `CT` | Apparel and accessories (1400, including watches, jewelry, eyewear and cosmetics) |
 | `LG` | Furniture and appliances (1600) + lodging (2210) |
 | `TR` | Fuel (1500) + vehicles (1800) + travel and transport (1900) |
 | `EE` | Medical and health (1700) + recreation and culture (2000) + education (2100) |
-| `DP` | Department stores (1110) + marts and specialty retail (1120) + supermarkets (1130) + duty-free (1150) |
+| `DP` | General retail (1100): department stores, marts and specialty retail, supermarkets, convenience stores and duty-free |
 | `EC` | E-commerce and mail order (1200) |
 | `OT` | Utilities and personal services (2300) + finance and insurance (2400) + other (2500); the total (1000) minus the codes above |
 
