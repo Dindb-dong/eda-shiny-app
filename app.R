@@ -268,7 +268,7 @@ server <- function(input, output, session) {
     d$month <- map_month()
     at <- match(paste(d$country, d$zone), paste(v$country, v$capital_area))
     d$stringency <- v$stringency[match(d$country, v$country)]
-    d$zone_cases <- v$cases[at]
+    d$zone_cases <- as.integer(v$cases[at])
     d$zone_distancing_level <- v$level[at]
     d
   })
@@ -366,7 +366,8 @@ server <- function(input, output, session) {
     view <- active_view()
     if (view == "industry_map") {
       v <- map_values()
-      cases <- ifelse(is.finite(v$cases), paste(format(v$cases, big.mark = ","), "cases"), "no complete case count")
+      cases <- ifelse(is.finite(v$cases), paste(trimws(formatC(v$cases, format = "d", big.mark = ",")),
+                                                 ifelse(v$cases == 1, "case", "cases")), "no complete case count")
       level <- ifelse(is.finite(v$level), sprintf(", distancing level %s", format(round(v$level, 1))), "")
       zones <- sprintf("%s %s %s%s", v$country, tolower(v$region), cases, level)
       national <- v[!duplicated(v$country), ]
