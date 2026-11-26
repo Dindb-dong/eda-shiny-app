@@ -371,7 +371,7 @@ read_unit_spending <- function(spending, path = "data", industry = read_industry
 }
 
 # One row per country and zone: year-over-year growth for the chosen industry and month,
-# with that month's zone cases, Korea's zone distancing level and national stringency.
+# with that month's zone cases per million, Korea's zone distancing level and national stringency.
 zone_values <- function(spending, covid_area, selected_countries, category, month) {
   d <- spending[spending$country %in% selected_countries & spending$category == category &
                   spending$month == month & spending$capital_area %in% c("capital", "non_capital"),
@@ -379,7 +379,7 @@ zone_values <- function(spending, covid_area, selected_countries, category, mont
   context <- covid_area[covid_area$month_id == month_id(as.Date(paste0(month, "01"), "%Y%m%d")), ]
   at <- match(paste(d$country, d$capital_area), paste(context$country, context$capital_area))
   d$stringency <- context$stringency[at]
-  d$cases <- context$cases[at]
+  d$cases_per_million <- context$cases_per_million[at]
   d$level <- context$level[at]
   d[order(d$country, d$capital_area), ]
 }

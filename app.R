@@ -268,7 +268,7 @@ server <- function(input, output, session) {
     d$month <- map_month()
     at <- match(paste(d$country, d$zone), paste(v$country, v$capital_area))
     d$stringency <- v$stringency[match(d$country, v$country)]
-    d$zone_cases <- as.integer(v$cases[at])
+    d$zone_cases_per_million <- v$cases_per_million[at]
     d$zone_distancing_level <- v$level[at]
     d
   })
@@ -366,8 +366,9 @@ server <- function(input, output, session) {
     view <- active_view()
     if (view == "industry_map") {
       v <- map_values()
-      cases <- ifelse(is.finite(v$cases), paste(trimws(formatC(v$cases, format = "d", big.mark = ",")),
-                                                 ifelse(v$cases == 1, "case", "cases")), "no complete case count")
+      cases <- ifelse(is.finite(v$cases_per_million),
+                      paste(trimws(formatC(round(v$cases_per_million), format = "d", big.mark = ",")), "cases per million"),
+                      "no complete case count")
       level <- ifelse(is.finite(v$level), sprintf(", distancing level %s", format(round(v$level, 1))), "")
       zones <- sprintf("%s %s %s%s", v$country, tolower(v$region), cases, level)
       national <- v[!duplicated(v$country), ]
@@ -432,7 +433,7 @@ server <- function(input, output, session) {
       d <- map_table()
       return(data.frame(Country = d$country, Level = ifelse(d$level == "zone", "Zone", "Province, city or county"),
                         Area = d$area, Industry = d$industry, Month = map_label(d$month), "YoY growth (%)" = d$yoy_pct,
-                        "Stringency (national)" = d$stringency, "Cases (zone)" = d$zone_cases,
+                        "Stringency (national)" = d$stringency, "Cases per million (zone)" = d$zone_cases_per_million,
                         "Distancing level (Korea zone)" = d$zone_distancing_level,
                         check.names = FALSE))
     }

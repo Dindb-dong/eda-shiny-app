@@ -8,6 +8,9 @@ national_total <- tapply(covid$cases[covid$month_id >= 24243], covid$country[cov
 stopifnot(nrow(covid_area) == 216L, all(abs(zone_total / national_total - 1) < .01),
           identical(sort(unique(covid_area$month_id[is.finite(covid_area$level)])), 24247:24262),
           all(covid_area$country[is.finite(covid_area$level)] == "Korea"))
+# Zone rates use the fixed December 2021 zone populations.
+dec2020 <- subset(covid_area, country == "Korea" & capital_area == "capital" & month_id == 24252)
+stopifnot(dec2020$cases == 19223, isTRUE(all.equal(dec2020$cases_per_million, 19223 / 26023283 * 1e6)))
 stopifnot(length(categories) == 7L, nrow(spending) == 4536L, nrow(covid) == 72L,
           all(table(spending$country, spending$category, spending$capital_area) == 108L),
           all(table(age_profile$category) == 576L))

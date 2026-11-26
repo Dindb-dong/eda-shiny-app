@@ -68,7 +68,15 @@ read_zone_cases <- function(path = "data") {
   ends$month_id <- month_id(ends$date)
   ends <- ends[order(ends$country, ends$capital_area, ends$date), ]
   ends$cases <- ave(ends$cumulative_confirmed, ends$country, ends$capital_area, FUN = function(x) c(NA, diff(x)))
-  ends[ends$capital_area != "unallocated", c("country", "capital_area", "month_id", "cases")]
+  ends <- ends[ends$capital_area != "unallocated", c("country", "capital_area", "month_id", "cases")]
+  # Fixed December 2021 zone populations (README.md), like the national denominators.
+  population <- read.csv(file.path(path, "population_by_capital_area_2021.csv"), fileEncoding = "UTF-8-BOM")
+  stopifnot(nrow(population) == 4L, !anyDuplicated(population[c("country", "capital_area")]),
+            all(population$population > 0))
+  at <- match(paste(ends$country, ends$capital_area), paste(population$country, population$capital_area))
+  stopifnot(!anyNA(at))
+  ends$cases_per_million <- ends$cases / population$population[at] * 1e6
+  ends
 }
 
 # Korea's published distancing level per zone (README.md), as each month's day-weighted
@@ -94,7 +102,8 @@ read_distancing_levels <- function(path = "data") {
 # National monthly rows plus capital and non-capital rows. Zone rows carry their own
 # cases and Korea's zone distancing level; deaths and stringency stay national.
 covid_by_area <- function(covid, zone_cases, levels) {
-  national <- transform(covid, capital_area = "national", level = NA_real_)
+  national <- transform(covid, capital_area = "national", level = NA_real_,
+                        cases_per_million = cases / unname(covid_population[ifelse(country == "Korea", "KOR", "TWN")]) * 1e6)
   zones <- merge(covid[setdiff(names(covid), "cases")], zone_cases, by = c("country", "month_id"))
   zones <- merge(zones, levels, by = c("country", "capital_area", "month_id"), all.x = TRUE)
   rbind(national, zones[names(national)])
