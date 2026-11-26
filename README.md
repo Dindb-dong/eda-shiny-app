@@ -139,6 +139,8 @@ The crosswalk's channel coverage differs between countries: NCCC C02 industry am
 
 The added monthly amounts were retrieved from ECOS and NCCC C02 on 23 November 2026. For every added Taiwan series, the sum of all 22 city and county amounts matches the published national figure. For 2019–2022, both countries’ added national totals also match the corresponding source codes in the repository’s national extracts. The regions describe where card spending is recorded. The COVID-19 extract still has country-level geographic resolution.
 
+Korean regions follow where the payment is recorded, not where the cardholder lives, and this matters most for e-commerce. In ECOS `601Y002` (retrieved from the ECOS Open API on 26 November 2026), the capital area recorded 98.4% of national e-commerce (1200) card spending in 2019 and 99.4% in 2022, Seoul alone 80.1% and 80.4%. E-commerce was 28.6% and 36.8% of Seoul's card spending but 0.5% and 0.2% in the 13 non-capital provinces. Over the same years, recorded e-commerce rose 74.9% in the capital area and fell 41.5% elsewhere. The regional analysis therefore leaves Korean e-commerce out of the seven industries and has no e-commerce category; Taiwan's online spending cannot be separated by region either. Even without e-commerce the capital area records 66.6% (2019) and 68.0% (2022) of Korean card spending, so merchant location also raises the capital share of the other industries.
+
 Both regional files include `covid_period` and use January 2020 as the cutoff for both countries. `pre_covid` covers January 2014 through December 2019, and `since_covid_onset` covers January 2020 through December 2022.
 
 ## Analysis Approach
