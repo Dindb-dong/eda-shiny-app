@@ -47,7 +47,7 @@ industry_heatmap <- function(d, categories, unit, columns) {
 relationship_plot <- function(paired, spending, covid, view, metric, measure, columns) {
   y_label <- spending_measures[[measure]]
   x_label <- covid_measures[[metric]]
-  if (metric != "stringency") x_label <- paste0(x_label, " (asinh of count / 100)")
+  if (!metric %in% level_measures) x_label <- paste0(x_label, " (asinh of count / 100)")
   paired$year <- format(paired$date, "%Y")
   grid <- panel_grid(columns)
 

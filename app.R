@@ -18,6 +18,7 @@ categories <- setNames(industry$label_en, industry$category)
 spending <- read_spending(industry = industry)
 covid_daily <- read_covid_daily()
 covid <- summarize_covid_monthly(covid_daily)
+covid_area <- covid_by_area(covid, read_zone_cases(), read_distancing_levels())
 age_profile <- read_age_profile(industry = industry)
 card_comparison <- read_card_comparison()
 boundaries <- read_region_boundaries()
@@ -239,7 +240,7 @@ server <- function(input, output, session) {
     validate(need(month %in% format(map_months, "%Y%m"), "Choose a month from January 2020 to December 2022."))
     as.integer(month)
   })
-  map_values <- reactive(zone_values(spending, covid, selected_countries(), req(input$category), map_month()))
+  map_values <- reactive(zone_values(spending, covid_area, selected_countries(), req(input$category), map_month()))
   unit_values <- reactive({
     if (!identical(input$map_fill, "unit")) return(NULL)
     u <- unit_spending[unit_spending$country %in% selected_countries() & unit_spending$unit_code != "other" &
@@ -265,8 +266,10 @@ server <- function(input, output, session) {
     d <- rbind(zones, units)
     d$industry <- unname(categories[[req(input$category)]])
     d$month <- map_month()
+    at <- match(paste(d$country, d$zone), paste(v$country, v$capital_area))
     d$stringency <- v$stringency[match(d$country, v$country)]
-    d$cases_per_million <- v$cases_per_million[match(d$country, v$country)]
+    d$zone_cases <- v$cases[at]
+    d$zone_distancing_level <- v$level[at]
     d
   })
   unit_extremes <- function(u) {
@@ -322,7 +325,11 @@ server <- function(input, output, session) {
   paired <- reactive({
     # Lag-profile charts calculate all leads; their summary and download use zero.
     lead <- if (active_view() == "lags") 0L else as.integer(req(input$lead))
-    pair_months(selection(), covid, analysis_metric(), lead)
+    d <- pair_months(selection(), covid_area, analysis_metric(), lead)
+    if (analysis_metric() == "level") {
+      validate(need(nrow(d) > 0, "Distancing levels are available only for Korea's capital and non-capital areas, July 2020 – October 2021."))
+    }
+    d
   })
   holdout <- reactive(by_series(selection(), forecast_backtest))
   predicted <- reactive({
@@ -358,12 +365,13 @@ server <- function(input, output, session) {
   output$coverage <- renderText({
     view <- active_view()
     if (view == "industry_map") {
-      v <- map_values()[!duplicated(map_values()$country), ]
-      cases <- ifelse(is.finite(v$cases_per_million),
-                      paste(format(round(v$cases_per_million), big.mark = ","), "cases per million"),
-                      "no complete case count")
-      return(paste0("National COVID-19 context, ", map_label(map_month()), " · ",
-                    paste(sprintf("%s: stringency %.0f, %s", v$country, v$stringency, cases), collapse = " · ")))
+      v <- map_values()
+      cases <- ifelse(is.finite(v$cases), paste(format(v$cases, big.mark = ","), "cases"), "no complete case count")
+      level <- ifelse(is.finite(v$level), sprintf(", distancing level %s", format(round(v$level, 1))), "")
+      zones <- sprintf("%s %s %s%s", v$country, tolower(v$region), cases, level)
+      national <- v[!duplicated(v$country), ]
+      return(paste0("COVID-19 context, ", map_label(map_month()), " · ", paste(zones, collapse = " · "),
+                    " · National stringency: ", paste(sprintf("%s %.0f", national$country, national$stringency), collapse = ", ")))
     }
     if (view %in% names(overview_views)) {
       d <- overview_data()
@@ -376,8 +384,9 @@ server <- function(input, output, session) {
     if (uses_pairs()) {
       if (view == "lags") return("Summary and download below use the same-month pairs.")
       d <- paired()
-      return(paste("Paired monthly data,", format(min(d$date), "%b %Y"), "–", format(max(d$date), "%b %Y"),
-                   "· COVID-19 measures are national."))
+      scope <- if (identical(input$area, "national")) "COVID-19 measures are national."
+               else "Cases and Korea's distancing level are by area; deaths and stringency are national."
+      return(paste("Paired monthly data,", format(min(d$date), "%b %Y"), "–", format(max(d$date), "%b %Y"), "·", scope))
     }
     d <- shown_spending()
     paste(format(min(d$date), "%b %Y"), "–", format(max(d$date), "%b %Y"), "· Monthly card spending")
@@ -391,7 +400,7 @@ server <- function(input, output, session) {
     if (view %in% forecast_views) return(forecast_plot(predicted(), view, columns))
     if (view == "break_model") return(break_plot(segmented(), columns))
     switch(req(input$tab),
-      relationship = relationship_plot(paired(), selection(), covid, view, analysis_metric(), analysis_measure(),
+      relationship = relationship_plot(paired(), selection(), covid_area, view, analysis_metric(), analysis_measure(),
                                        columns),
       spending = spending_plot(shown_spending(), selection(), view, analysis_measure(), columns),
       diagnostics = diagnostic_plot(selection(), if (uses_pairs()) paired() else NULL,
@@ -422,7 +431,8 @@ server <- function(input, output, session) {
       d <- map_table()
       return(data.frame(Country = d$country, Level = ifelse(d$level == "zone", "Zone", "Province, city or county"),
                         Area = d$area, Industry = d$industry, Month = map_label(d$month), "YoY growth (%)" = d$yoy_pct,
-                        "Stringency (national)" = d$stringency, "Cases per million (national)" = d$cases_per_million,
+                        "Stringency (national)" = d$stringency, "Cases (zone)" = d$zone_cases,
+                        "Distancing level (Korea zone)" = d$zone_distancing_level,
                         check.names = FALSE))
     }
     if (view %in% names(overview_views)) {

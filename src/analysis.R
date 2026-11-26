@@ -7,7 +7,10 @@ spending_measures <- c(yoy = "Year-over-year growth (%)",
                        monthly = "Month-over-month growth (%)",
                        double_diff = "First and seasonal log difference (×100)")
 covid_measures <- c(cases = "Reported cases", deaths = "Reported deaths",
-                    stringency = "Restriction stringency (0–100)")
+                    stringency = "Restriction stringency (0–100)",
+                    level = "Korea distancing level (by area)")
+# Measures plotted on their own scale; counts use asinh(count / 100).
+level_measures <- c("stringency", "level")
 onset <- as.Date("2020-01-01")
 month_id <- function(date) as.integer(format(date, "%Y")) * 12L + as.integer(format(date, "%m"))
 
@@ -134,11 +137,13 @@ by_series <- function(data, fn, keys = "panel") {
 
 pair_months <- function(spending, covid, metric, lead = 0L) {
   spending$covid_month_id <- spending$month_id - lead
+  # Area-level COVID-19 rows pair with the matching spending area.
+  keys <- intersect("capital_area", names(covid))
   paired <- merge(spending, covid,
-                  by.x = c("country", "covid_month_id"), by.y = c("country", "month_id"))
+                  by.x = c("country", keys, "covid_month_id"), by.y = c("country", keys, "month_id"))
   paired$x <- paired[[metric]]
   # asinh retains zero and negative reporting corrections.
-  if (metric != "stringency") paired$x <- asinh(paired$x / 100)
+  if (!metric %in% level_measures) paired$x <- asinh(paired$x / 100)
   paired <- subset(paired, is.finite(x) & is.finite(value))
   paired[order(paired$panel, paired$date), , drop = FALSE]
 }
@@ -366,14 +371,15 @@ read_unit_spending <- function(spending, path = "data", industry = read_industry
 }
 
 # One row per country and zone: year-over-year growth for the chosen industry and month,
-# with that month's national COVID-19 context.
-zone_values <- function(spending, covid, selected_countries, category, month) {
+# with that month's zone cases, Korea's zone distancing level and national stringency.
+zone_values <- function(spending, covid_area, selected_countries, category, month) {
   d <- spending[spending$country %in% selected_countries & spending$category == category &
                   spending$month == month & spending$capital_area %in% c("capital", "non_capital"),
                 c("country", "category", "month", "capital_area", "region", "yoy")]
-  context <- covid[covid$month_id == month_id(as.Date(paste0(month, "01"), "%Y%m%d")), ]
-  d$stringency <- context$stringency[match(d$country, context$country)]
-  population <- c(Korea = covid_population[["KOR"]], Taiwan = covid_population[["TWN"]])
-  d$cases_per_million <- context$cases[match(d$country, context$country)] / population[d$country] * 1e6
+  context <- covid_area[covid_area$month_id == month_id(as.Date(paste0(month, "01"), "%Y%m%d")), ]
+  at <- match(paste(d$country, d$capital_area), paste(context$country, context$capital_area))
+  d$stringency <- context$stringency[at]
+  d$cases <- context$cases[at]
+  d$level <- context$level[at]
   d[order(d$country, d$capital_area), ]
 }
