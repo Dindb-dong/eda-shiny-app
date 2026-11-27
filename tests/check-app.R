@@ -381,6 +381,28 @@ testServer(covidTabServer, args = list(covid_daily = read_covid_daily()), {
             nrow(two_sample_q(plot_data())) == 99L,
             startsWith(output$dist_plot$src, "data:image/png"))
   session$setInputs(metric = covid_metrics[["Reproduction rate (R)"]])
-  stopifnot(nrow(plot_data()) > 2L, all(is.finite(plot_data()$value)))
+  stopifnot(nrow(plot_data()) > 2L, all(is.finite(plot_data()$value)),
+            startsWith(output$ts_plot$src, "data:image/png"), grepl("Above 1", output$definition))
+  # Monthly totals leave out months without a report on every selected day.
+  session$setInputs(metric = "new_cases", freq = "monthly", per_million = TRUE,
+                    dates = as.Date(c("2020-01-01", "2020-01-15")))
+  stopifnot(nrow(plot_data()) == 0L)
+  session$setInputs(dates = as.Date(c("2020-01-01", "2020-03-15")))
+  expected <- subset(covid_daily, format(date, "%Y-%m") == "2020-02")
+  stopifnot(all(plot_data()$date == as.Date("2020-02-01")), nrow(plot_data()) == 2L,
+            isTRUE(all.equal(plot_data()$value, as.numeric(tapply(expected$cases_pm, expected$country, sum)))),
+            grepl("Peak date", output$summary_tbl, fixed = TRUE), grepl("about equal", output$summary_note))
+  session$setInputs(dates = as.Date(c("2020-01-01", "2022-12-31")))
+  stopifnot(nrow(plot_data()) == 70L, grepl("right skew", output$summary_note))
+  # Cumulative measures use the latest monthly value and never a 7-day average.
+  session$setInputs(metric = covid_metrics[["Fully vaccinated (%)"]],
+                    dates = as.Date(c("2022-12-01", "2022-12-31")))
+  stopifnot(isTRUE(all.equal(plot_data()$value, c(85.64171, 88.0759), tolerance = 1e-6)),
+            grepl("Latest date", output$summary_tbl, fixed = TRUE),
+            !grepl("Peak date", output$summary_tbl, fixed = TRUE))
+  session$setInputs(freq = "ma7")
+  stopifnot(freq() == "daily")
+  session$setInputs(freq = "daily", dist_type = "md")
+  stopifnot(startsWith(output$dist_plot$src, "data:image/png"))
 })
 cat(sprintf("All %d dashboard views and the seven Key findings plots rendered. All seven regional industries, geography, leads, transforms, forecasts, CSV downloads and the COVID-19 comparison section verified.\n", length(view_names)))
