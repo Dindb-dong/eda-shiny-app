@@ -6,6 +6,11 @@ card_category_labels <- c(
   DP = "Department stores (DP)", OT = "Other (OT)", EC = "E-commerce (EC)"
 )
 card_country_colors <- c(Korea = "#2464bd", Taiwan = "#b95013")
+# Category-share views (from the PR #13 attachment): stacking order, bottom to top
+card_share_order <- c("EC", "FD", "CT", "LG", "TR", "EE", "DP", "OT")
+card_channel_labels <- c(EC = "E-commerce", OFF = "Offline (7 categories)")
+card_share_palette <- c("#2a78d6", "#eb6834", "#1baf7a", "#eda100",
+                        "#e87ba4", "#008300", "#6250d6", "#e34948")
 card_month_id <- function(date) as.integer(format(date, "%Y")) * 12L + as.integer(format(date, "%m"))
 
 read_card_comparison <- function(path = "data/card_comparison") {
@@ -61,9 +66,12 @@ read_card_comparison <- function(path = "data/card_comparison") {
 }
 
 card_aggregate <- function(data, scope = "total", categories = c("FD", "TR", "EC"),
-                            drop_other = FALSE, countries = c("Korea", "Taiwan")) {
+                            drop_other = FALSE, countries = c("Korea", "Taiwan"),
+                            offline_only = FALSE) {
   d <- data[data$country %in% countries, ]
   if (drop_other) d <- d[d$origin != "OT", ]
+  offline_total <- scope == "total" && offline_only
+  if (offline_total) d <- d[d$category != "EC", ]
   if (scope == "total") {
     d$category <- "total"
   } else {
@@ -75,7 +83,8 @@ card_aggregate <- function(data, scope = "total", categories = c("FD", "TR", "EC
     data.frame(date = g$date[1], country = g$country[1], category = g$category[1],
                amount_local = sum(g$amount_local), cpi = g$cpi[1])
   }))
-  out$panel <- ifelse(out$category == "total", "Total spending", card_category_labels[out$category])
+  out$panel <- ifelse(out$category != "total", card_category_labels[out$category],
+                      if (offline_total) "Offline spending" else "Total spending")
   out <- out[order(out$country, out$category, out$date), ]
   rownames(out) <- NULL
   out
@@ -113,6 +122,95 @@ card_transform <- function(data, unit = "real_index", series = "raw") {
   out
 }
 
+# Robust LOESS trend per country and panel; one-off spikes carry little weight.
+card_loess <- function(d, span = 0.5) {
+  groups <- split(d, interaction(d$country, d$panel, drop = TRUE))
+  out <- do.call(rbind, lapply(groups, function(g) {
+    x <- as.numeric(g$date)
+    fit <- tryCatch(suppressWarnings(stats::loess(value ~ x, data.frame(value = g$value, x = x),
+                                                  span = span, degree = 2, family = "symmetric")),
+                    error = function(e) NULL)
+    if (is.null(fit)) return(NULL)
+    g$trend <- as.numeric(predict(fit, data.frame(x = x)))
+    g[is.finite(g$trend), ]
+  }))
+  if (is.null(out)) d[0, ] else out
+}
+
+# Each category's share of a country's annual spending (%). Currency and the
+# overall price level cancel out. A year with a missing month or category is dropped.
+card_shares <- function(data, years, drop_other = FALSE, countries = c("Korea", "Taiwan"),
+                        channel = FALSE) {
+  d <- data[data$country %in% countries, ]
+  if (drop_other) d <- d[d$origin != "OT", ]
+  d$year <- as.integer(format(d$date, "%Y"))
+  d <- d[d$year >= years[1] & d$year <= years[2], ]
+  if (!nrow(d)) return(data.frame())
+  if (channel) d$category <- ifelse(d$category == "EC", "EC", "OFF")
+  out <- aggregate(amount_local ~ country + year + category, d, sum, na.action = na.pass)
+  out$share <- ave(out$amount_local, out$country, out$year, FUN = function(x) x / sum(x) * 100)
+  out <- out[is.finite(out$share), ]
+  order <- if (channel) names(card_channel_labels) else card_share_order
+  out <- out[order(out$country, out$year, match(out$category, order)), ]
+  out$ymax <- ave(out$share, out$country, out$year, FUN = cumsum)
+  out$ymin <- out$ymax - out$share
+  labels <- if (channel) card_channel_labels else card_category_labels[card_share_order]
+  out$label <- factor(labels[out$category], levels = labels)
+  rownames(out) <- NULL
+  out
+}
+
+card_partial_year <- function(end) {
+  if (format(end, "%m") == "12") NA_integer_ else as.integer(format(end, "%Y"))
+}
+card_year_labels <- function(years, end) {
+  partial <- card_partial_year(end)
+  ifelse(!is.na(partial) & years == partial,
+         paste0(years, "\n(Jan–", month.abb[as.integer(format(end, "%m"))], ")"), years)
+}
+
+card_share_shade <- function(p, years) {
+  if (is.null(years)) p else p + annotate("rect", xmin = years[1] - .5, xmax = years[2] + .5,
+                                          ymin = -Inf, ymax = Inf, fill = "#999999", alpha = .14)
+}
+
+card_share_bar_plot <- function(d, end, columns = 2L, shaded_years = NULL, reclass = FALSE) {
+  years <- sort(unique(d$year))
+  colors <- setNames(card_share_palette[seq_along(levels(d$label))], levels(d$label))
+  p <- card_share_shade(ggplot(d), shaded_years) +
+    geom_rect(aes(xmin = year - .36, xmax = year + .36, ymin = ymin, ymax = ymax, fill = label),
+              color = "white", linewidth = .6)
+  if (reclass && "Taiwan" %in% d$country) {
+    mark <- data.frame(country = "Taiwan", x = 2020.5, label = "Category change, Feb 2021")
+    p <- p + geom_segment(data = mark, aes(x = x, xend = x, y = 0, yend = 101),
+                          linetype = "dashed", color = "#111111", linewidth = .4) +
+      geom_text(data = mark, aes(x = x + .1, y = 104.5, label = label), hjust = 1, size = 3.2, color = "#111111")
+  }
+  p + scale_fill_manual(values = colors, breaks = rev(levels(droplevels(d$label))), name = NULL) +
+    scale_x_continuous(breaks = years, labels = card_year_labels(years, end), expand = expansion(add = .3)) +
+    scale_y_continuous(breaks = seq(0, 100, 25), labels = function(x) paste0(x, "%"),
+                       limits = c(0, 108), expand = c(0, 0)) +
+    labs(x = NULL, y = "Share of annual card spending") +
+    facet_wrap(vars(country), ncol = columns) + chart_theme +
+    theme(legend.position = if (columns == 1L) "bottom" else "right", legend.justification = "top",
+          panel.grid.major.x = element_blank(),
+          axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+card_share_line_plot <- function(d, end, columns = 2L, free_y = FALSE, shaded_years = NULL, reclass = FALSE) {
+  years <- sort(unique(d$year))
+  breaks <- if (length(years) > 6L) years[seq(1L, length(years), by = 2L)] else years
+  p <- card_share_shade(ggplot(d, aes(year, share, color = country, shape = country)), shaded_years)
+  if (reclass) p <- p + geom_vline(xintercept = 2020.5, linetype = "dashed", color = "#555555", linewidth = .4)
+  p + geom_line(linewidth = .75) + geom_point(size = 2) +
+    scale_colour_manual(values = card_country_colors, name = NULL) +
+    scale_shape_manual(values = c(Korea = 16, Taiwan = 17), name = NULL) +
+    scale_x_continuous(breaks = breaks, labels = card_year_labels(breaks, end)) +
+    scale_y_continuous(labels = function(x) paste0(x, "%")) +
+    labs(x = NULL, y = "Share of annual card spending") + chart_theme +
+    facet_wrap(vars(panel), ncol = columns, scales = if (free_y) "free_y" else "fixed")
+}
+
 card_y_label <- function(unit, series) {
   if (series == "yoy") return("Year-over-year change (%)")
   label <- switch(unit, local = "Korea: KRW trillion\nTaiwan: NT$ billion",
@@ -122,9 +220,10 @@ card_y_label <- function(unit, series) {
 }
 
 card_comparison_plot <- function(d, unit, series, columns = 2L, free_y = FALSE,
-                                  shaded_period = NULL, restrictions = FALSE) {
+                                  shaded_period = NULL, restrictions = FALSE, trend = NULL) {
   comparable <- unit != "local" || series == "yoy"
-  d$panel <- factor(d$panel, levels = c("Total spending", unname(card_category_labels)))
+  panels <- c("Total spending", "Offline spending", unname(card_category_labels))
+  d$panel <- factor(d$panel, levels = panels)
   d$segment <- ave(card_month_id(d$date), interaction(d$country, d$panel, drop = TRUE),
                    FUN = function(month) cumsum(c(TRUE, diff(month) != 1L)))
   p <- ggplot(d, aes(date, value, color = country, shape = country,
@@ -148,7 +247,18 @@ card_comparison_plot <- function(d, unit, series, columns = 2L, free_y = FALSE,
   reference <- if (series == "yoy") 0 else if (unit != "local") 100 else NA_real_
   if (is.finite(reference)) p <- p + geom_hline(yintercept = reference, linetype = "dashed", color = "#555555")
   points <- d[format(d$date, "%m") %in% c("01", "07"), ]
-  p <- p + geom_line(linewidth = .75) + geom_point(data = points, size = 2) +
+  if (is.null(trend)) {
+    p <- p + geom_line(linewidth = .75) + geom_point(data = points, size = 2)
+  } else {
+    # The series turns light; the bold line is the LOESS trend.
+    trend$panel <- factor(trend$panel, levels = panels)
+    trend$segment <- 1L
+    trend_points <- trend[format(trend$date, "%m") %in% c("01", "07"), ]
+    p <- p + geom_line(linewidth = .45, alpha = .35) +
+      geom_line(data = trend, aes(y = trend), linewidth = 1.1) +
+      geom_point(data = trend_points, aes(y = trend), size = 2)
+  }
+  p <- p +
     scale_colour_manual(values = card_country_colors, name = NULL) +
     scale_shape_manual(values = c(Korea = 16, Taiwan = 17), name = NULL) +
     scale_x_date(date_breaks = "2 years", date_labels = "%Y") +
@@ -165,19 +275,38 @@ card_section_ui <- function(id, dates = as.Date(c("2014-01-01", "2023-08-01"))) 
   ns <- NS(id)
   tagList(
     tags$div(class = "filter-grid main-filters",
+      selectInput(ns("view"), "View", c("Spending trends" = "trend",
+        "Category shares (stacked bars)" = "share_bar", "Category shares (by category)" = "share_line"),
+        selectize = FALSE),
       selectInput(ns("country"), "Country", c("Korea and Taiwan" = "both", "Korea", "Taiwan"), selectize = FALSE),
-      selectInput(ns("scope"), "Compare", c("Total spending" = "total", "Selected categories" = "category"), selectize = FALSE),
-      selectInput(ns("unit"), "Amount shown as", c("Local currency (KRW, NT$)" = "local",
-        "2014 index" = "index", "Inflation-adjusted 2014 index" = "real_index"),
-        selected = "real_index", selectize = FALSE),
-      selectInput(ns("series"), "Series", c("Monthly values" = "raw", "12-month moving average" = "ma12",
-        "Year-over-year change (%)" = "yoy"), selectize = FALSE)),
+      conditionalPanel("input.view === 'trend'", ns = ns,
+        selectInput(ns("scope"), "Compare", c("Total spending" = "total", "Selected categories" = "category"), selectize = FALSE)),
+      conditionalPanel("input.view === 'trend' && input.scope === 'total'", ns = ns,
+        selectInput(ns("total_type"), "Total includes", c("All spending (offline + e-commerce)" = "all",
+          "Offline only (excluding e-commerce)" = "offline"), selectize = FALSE)),
+      conditionalPanel("input.view === 'trend'", ns = ns,
+        selectInput(ns("unit"), "Amount shown as", c("Local currency (KRW, NT$)" = "local",
+          "2014 index" = "index", "Inflation-adjusted 2014 index" = "real_index"),
+          selected = "real_index", selectize = FALSE)),
+      conditionalPanel("input.view === 'trend'", ns = ns,
+        selectInput(ns("series"), "Series", c("Monthly values" = "raw", "12-month moving average" = "ma12",
+          "Year-over-year change (%)" = "yoy"), selectize = FALSE)),
+      conditionalPanel("input.view === 'share_bar'", ns = ns,
+        selectInput(ns("bar_split"), "Split bars by", c("All categories" = "cats",
+          "Offline vs e-commerce" = "channel"), selectize = FALSE))),
     tags$div(class = "filter-grid analysis-options",
       dateRangeInput(ns("dates"), "Date range", start = dates[1], end = dates[2], min = dates[1], max = dates[2], format = "yyyy-mm"),
       checkboxInput(ns("drop_other"), "Exclude Other (OT)", FALSE),
-      conditionalPanel("input.unit !== 'local' || input.series === 'yoy'", ns = ns,
+      conditionalPanel("input.view !== 'trend'", ns = ns,
+        checkboxInput(ns("include_partial"), paste0("Include ", format(dates[2], "%Y"), " (Jan–",
+          month.abb[as.integer(format(dates[2], "%m"))], " only)"), FALSE)),
+      conditionalPanel("(input.view === 'trend' && (input.unit !== 'local' || input.series === 'yoy')) || input.view === 'share_line'", ns = ns,
         checkboxInput(ns("free_y"), "Separate y-axis per category", FALSE)),
-      conditionalPanel("input.scope === 'category'", ns = ns, class = "sensitivity-option",
+      conditionalPanel("input.view === 'trend'", ns = ns,
+        checkboxInput(ns("loess"), "Add LOESS trend line", FALSE)),
+      conditionalPanel("input.view === 'trend' && input.loess", ns = ns,
+        sliderInput(ns("span"), "LOESS span", min = 0.1, max = 1, value = 0.5, step = 0.05)),
+      conditionalPanel("(input.view === 'trend' && input.scope === 'category') || input.view === 'share_line'", ns = ns, class = "sensitivity-option",
         checkboxGroupInput(ns("categories"), "Categories", setNames(names(card_category_labels), unname(card_category_labels)),
           selected = c("FD", "TR", "EC"), inline = TRUE))),
     tags$details(class = "methods",
@@ -187,7 +316,7 @@ card_section_ui <- function(id, dates = as.Date(c("2014-01-01", "2023-08-01"))) 
         conditionalPanel("input.shade", ns = ns,
           dateRangeInput(ns("covid_range"), "Shaded period", start = as.Date("2020-01-01"), end = as.Date("2022-12-01"),
             min = dates[1], max = dates[2], format = "yyyy-mm")),
-        conditionalPanel("input.shade", ns = ns,
+        conditionalPanel("input.shade && input.view === 'trend'", ns = ns,
           checkboxInput(ns("restrictions"), "Mark reference restriction windows", FALSE))),
       tags$p(class = "chart-note", "Optional reference windows supplied with this comparison: Korea, July–October 2021; Taiwan, May–July 2021. These do not define a measured national restriction maximum.")),
     tags$section(class = "analysis-section", "aria-labelledby" = ns("chart-title"),
@@ -207,40 +336,100 @@ card_section_ui <- function(id, dates = as.Date(c("2014-01-01", "2023-08-01"))) 
       tags$p("This nationwide eight-category extract is separate from the food and apparel proxies in the joint analysis. Each index uses its own country and category's 2014 monthly average. CPI adjustment uses the supplied national consumer-price series."),
       tags$p("E-commerce is Korea's EC series and Taiwan's online spending summed across seven categories. The other seven series use offline amounts. Source coverage and category definitions can differ between countries."),
       tags$p("Excluding Other also removes its online component from Taiwan's e-commerce. Korea's e-commerce has no category breakdown and remains unchanged, so the exclusion is asymmetric."),
+      tags$p("Share views use calendar years inside the date range and leave out the partial last year unless it is included. Shares divide by each country's annual card spending, so currency and the overall price level cancel out; category-specific price changes, such as fuel in Transport, still show. Taiwan's Food, Department stores and Other shares shift sharply from February 2021, most likely a merchant reclassification (dashed line)."),
+      tags$p("The LOESS trend is a robust local quadratic fit (family = \"symmetric\"), so one-off spikes such as tax-payment months carry little weight. Smaller spans follow the data more closely. Hover values and downloads are from the series, not the trend."),
       tags$p("A 12-month average smooths seasonal variation and delays sharp changes. Year-over-year growth compares the same calendar month; it does not remove all holiday or reporting effects. Transformations use the full series before the displayed date range is applied."),
       tags$p("The supplied data identifies Taiwan card spending as NCCC. The Korean card and CPI extracts do not yet include source references.")))
 }
 
 card_section_server <- function(id, data) {
   moduleServer(id, function(input, output, session) {
+    view <- reactive(req(input$view))
+    countries <- reactive(if (req(input$country) == "both") c("Korea", "Taiwan") else input$country)
+    width <- reactive({
+      w <- session$clientData[[paste0("output_", session$ns("chart"), "_width")]]
+      if (is.null(w) || !is.finite(w) || w <= 0) 1000 else w
+    })
+    date_range <- reactive({
+      dates <- as.Date(req(input$dates))
+      validate(need(length(dates) == 2L && !anyNA(dates) && dates[1] <= dates[2], "Choose a valid date range."))
+      as.Date(format(dates, "%Y-%m-01"))
+    })
+
+    # ---- Spending trends ----
+    offline_total <- reactive(identical(input$total_type, "offline"))
     aggregated <- reactive({
-      country <- if (req(input$country) == "both") c("Korea", "Taiwan") else input$country
       if (req(input$scope) == "category") validate(need(length(input$categories), "Select at least one category."))
-      d <- card_aggregate(data$data, input$scope, input$categories, isTRUE(input$drop_other), country)
+      d <- card_aggregate(data$data, input$scope, input$categories, isTRUE(input$drop_other), countries(),
+                          offline_only = offline_total())
       validate(need(nrow(d), "No categories remain. Choose another category or include Other."))
       d
     })
     transformed <- reactive(card_transform(aggregated(), req(input$unit), req(input$series)))
     selected <- reactive({
-      dates <- as.Date(req(input$dates))
-      validate(need(length(dates) == 2L && !anyNA(dates) && dates[1] <= dates[2], "Choose a valid date range."))
-      dates <- as.Date(format(dates, "%Y-%m-01"))
+      dates <- date_range()
       d <- transformed()
       d <- d[d$date >= dates[1] & d$date <= dates[2] & is.finite(d$value), ]
       validate(need(nrow(d), "No values in this range. A 12-month history is needed for annual changes or moving averages."))
       d
     })
+    trend <- reactive(if (isTRUE(input$loess)) card_loess(selected(), req(input$span)) else NULL)
     comparable <- reactive(req(input$unit) != "local" || req(input$series) == "yoy")
-    layout <- reactive({
-      d <- selected()
-      width <- session$clientData[[paste0("output_", session$ns("chart"), "_width")]]
-      if (is.null(width) || !is.finite(width) || width <= 0) width <- 1000
-      count <- if (comparable()) length(unique(d$panel)) else nrow(unique(d[c("country", "panel")]))
-      columns <- if (width < 590 || count == 1L) 1L else 2L
-      list(columns = columns, height = 300L * ceiling(count / columns) + 55L)
+
+    # ---- Category shares ----
+    share_years <- reactive({
+      years <- as.integer(format(date_range(), "%Y"))
+      partial <- card_partial_year(data$end)
+      if (!is.na(partial) && !isTRUE(input$include_partial)) years[2] <- min(years[2], partial - 1L)
+      validate(need(years[1] <= years[2], "Widen the date range to include at least one full year."))
+      years
     })
-    output$title <- renderText(if (req(input$scope) == "total") "Total card spending" else "Card spending by category")
+    by_channel <- reactive(view() == "share_bar" && identical(input$bar_split, "channel"))
+    reclass <- reactive(share_years()[1] <= 2020 && share_years()[2] >= 2021 && "Taiwan" %in% countries())
+    shares <- reactive({
+      d <- card_shares(data$data, share_years(), isTRUE(input$drop_other), countries(), by_channel())
+      if (view() == "share_line") {
+        keep <- intersect(names(card_category_labels), input$categories)
+        if (isTRUE(input$drop_other)) keep <- setdiff(keep, "OT")
+        validate(need(length(keep), "Select at least one category."))
+        d <- d[d$category %in% keep, ]
+        d$panel <- factor(card_category_labels[d$category], levels = card_category_labels[keep])
+      }
+      validate(need(nrow(d), "No data to show."))
+      d
+    })
+    shaded_years <- reactive({
+      if (!isTRUE(input$shade)) return(NULL)
+      covid <- as.integer(format(as.Date(req(input$covid_range)), "%Y"))
+      years <- c(max(covid[1], share_years()[1]), min(covid[2], share_years()[2]))
+      if (years[1] <= years[2]) years else NULL
+    })
+
+    # ---- Shown data, layout and text ----
+    shown <- reactive(if (view() == "trend") selected() else shares())
+    layout <- reactive({
+      d <- shown()
+      count <- switch(view(),
+        trend = if (comparable()) length(unique(d$panel)) else nrow(unique(d[c("country", "panel")])),
+        share_bar = length(unique(d$country)),
+        share_line = length(unique(d$panel)))
+      columns <- if (width() < 590 || count == 1L) 1L else 2L
+      per <- if (view() == "share_bar") 440L else 300L
+      list(columns = columns, height = per * ceiling(count / columns) + if (view() == "share_bar" && columns == 1L) 160L else 55L)
+    })
+    output$title <- renderText(switch(view(),
+      share_bar = if (by_channel()) "Offline and e-commerce shares of annual card spending"
+                  else "Category shares of annual card spending",
+      share_line = "Category shares of annual card spending, by category",
+      trend = if (req(input$scope) != "total") "Card spending by category"
+              else if (offline_total()) "Offline card spending" else "Total card spending"))
     output$note <- renderText({
+      if (view() != "trend") {
+        return(paste(
+          if (view() == "share_bar") "Each bar splits one year's card spending and sums to 100%."
+          else "Each category's share of yearly spending, Korea against Taiwan.",
+          "Currency and the overall price level cancel out in the ratio."))
+      }
       amount <- switch(req(input$unit),
         local = if (req(input$series) == "yoy")
           "Percentage changes in local-currency spending are compared across countries."
@@ -250,41 +439,88 @@ card_section_server <- function(id, data) {
       treatment <- switch(req(input$series), raw = "Monthly values retain seasonal variation.",
         ma12 = "The trailing 12-month average smooths seasonality and delays sharp changes.",
         yoy = "Percentage change from the same calendar month one year earlier.")
-      paste(amount, treatment)
+      paste(c(amount, treatment,
+              if (offline_total() && input$scope == "total") "The total covers the seven offline categories without e-commerce.",
+              if (isTRUE(input$loess)) sprintf("Bold lines: robust LOESS trend (span %.2f); light lines: the series.", input$span)),
+            collapse = " ")
     })
     output$coverage <- renderText({
+      if (view() != "trend") {
+        years <- share_years()
+        partial <- card_partial_year(data$end)
+        return(paste0(years[1], "–", years[2], " · Annual shares of nationwide card spending",
+          if (!is.na(partial) && years[2] == partial) paste0(" · ", partial, " covers Jan–", format(data$end, "%b"), " only")
+          else if (!is.na(partial)) paste0(" · ", partial, " left out (data end in ", format(data$end, "%B"), ")")))
+      }
       d <- selected()
       paste(format(min(d$date), "%b %Y"), "–", format(max(d$date), "%b %Y"),
             "· Nationwide monthly card spending · 2014 baseline")
     })
     output$chart <- renderPlot({
-      period <- if (isTRUE(input$shade)) as.Date(req(input$covid_range)) else NULL
-      card_comparison_plot(selected(), input$unit, input$series, layout()$columns,
-                             isTRUE(input$free_y), period, isTRUE(input$restrictions))
+      switch(view(),
+        share_bar = card_share_bar_plot(shares(), data$end, layout()$columns, shaded_years(), reclass() && !by_channel()),
+        share_line = card_share_line_plot(shares(), data$end, layout()$columns, isTRUE(input$free_y),
+                                          shaded_years(), reclass()),
+        trend = {
+          period <- if (isTRUE(input$shade)) as.Date(req(input$covid_range)) else NULL
+          card_comparison_plot(selected(), input$unit, input$series, layout()$columns,
+                               isTRUE(input$free_y), period, isTRUE(input$restrictions), trend())
+        })
     }, height = function() layout()$height, execOnResize = TRUE,
-      alt = function() paste("Monthly card spending for", paste(unique(selected()$country), collapse = " and "),
-        "in the selected categories.", card_y_label(input$unit, input$series),
-        "Korea uses blue circles and Taiwan orange triangles. Values are available in the summary and CSV download."))
+      alt = function() switch(view(),
+        share_bar = paste0("Stacked bar chart for ", paste(countries(), collapse = " and "), ": each year's card spending split ",
+          if (by_channel()) "into offline and e-commerce" else "by category", ", every bar summing to 100%. Values are available in the summary and CSV download."),
+        share_line = "Line charts of each category's share of annual card spending, Korea in blue circles and Taiwan in orange triangles. Values are available in the summary and CSV download.",
+        trend = paste("Monthly card spending for", paste(unique(selected()$country), collapse = " and "),
+          "in the selected categories.", card_y_label(input$unit, input$series),
+          if (isTRUE(input$loess)) "A bold LOESS trend line is drawn over the lighter series." else "",
+          "Korea uses blue circles and Taiwan orange triangles. Values are available in the summary and CSV download.")))
     output$hover_text <- renderText({
-      if (is.null(input$hover)) return("Hover over the chart for a value, or download the selected monthly data below.")
-      points <- nearPoints(selected(), input$hover, xvar = "date", yvar = "value", threshold = 12, maxpoints = 2)
-      if (!nrow(points)) return("Hover over a line to read a monthly value.")
+      h <- input$hover
+      if (is.null(h)) return("Hover over the chart for a value, or download the selected data below.")
+      if (view() == "share_bar") {
+        year <- round(h$x)
+        segment <- if (is.null(h$panelvar1) || abs(h$x - year) > .36) shares()[0, ]
+                   else subset(shares(), country == h$panelvar1 & year == round(h$x) & h$y >= ymin & h$y < ymax)
+        if (!nrow(segment)) return("Hover over a bar segment to read its share.")
+        return(sprintf("%d · %s · %s · %.1f%%", segment$year, segment$country, segment$label, segment$share))
+      }
+      share <- view() == "share_line"
+      points <- nearPoints(shown(), h, xvar = if (share) "year" else "date", yvar = if (share) "share" else "value",
+                           threshold = 12, maxpoints = 2)
+      if (!nrow(points)) return("Hover over a line to read a value.")
+      if (share) return(paste(points$year, points$country, points$panel, sprintf("%.1f%%", points$share),
+                              sep = " · ", collapse = "; "))
       paste(paste(format(points$date, "%Y-%m"), points$country, points$panel,
                    formatC(points$value, format = "f", digits = 2, big.mark = ","), sep = " · "), collapse = "; ")
     })
     output$summary <- renderTable({
-      groups <- split(selected(), interaction(selected()$country, selected()$panel, drop = TRUE))
+      d <- shown()
+      if (view() != "trend") {
+        groups <- split(d, interaction(d$country, d$label, drop = TRUE))
+        return(do.call(rbind, lapply(groups, function(g) data.frame(
+          Series = paste(g$country[1], g$label[1], sep = " · "), Years = nrow(g),
+          `First share (%)` = g$share[which.min(g$year)], `Last share (%)` = g$share[which.max(g$year)],
+          `Change (pp)` = g$share[which.max(g$year)] - g$share[which.min(g$year)], check.names = FALSE))))
+      }
+      groups <- split(d, interaction(d$country, d$panel, drop = TRUE))
       do.call(rbind, lapply(groups, function(g) data.frame(
         Series = paste(g$country[1], g$panel[1], sep = " · "), Months = nrow(g),
         Median = median(g$value), IQR = IQR(g$value), Mean = mean(g$value), SD = sd(g$value))))
     }, digits = 2, striped = FALSE, bordered = FALSE, spacing = "s")
     output$download <- downloadHandler(
-      filename = function() paste0("card-comparison-", input$unit, "-", input$series, ".csv"),
+      filename = function() if (view() == "trend") paste0("card-comparison-", input$unit, "-", input$series, ".csv")
+                            else paste0("card-comparison-", view(), ".csv"),
       content = function(file) {
-        d <- selected()
-        d$amount_unit <- ifelse(d$country == "Korea", "KRW", "NTD")
-        d$display_unit <- input$unit
-        d$series <- input$series
+        d <- shown()
+        if (view() == "trend") {
+          d$amount_unit <- ifelse(d$country == "Korea", "KRW", "NTD")
+          d$display_unit <- input$unit
+          d$series <- input$series
+        } else {
+          d <- d[c("country", "year", "category", "label", "amount_local", "share")]
+          d$amount_unit <- ifelse(d$country == "Korea", "KRW", "NTD")
+        }
         d$excluded_other <- isTRUE(input$drop_other)
         write.csv(d, file, row.names = FALSE, na = "")
       })
