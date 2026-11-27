@@ -1,12 +1,8 @@
-# COVID-19 comparison section: daily Korea vs Taiwan, 2021–2022.
+# COVID-19 comparison section: daily Korea vs Taiwan, 2020–2022.
 # A Shiny module so its input and output IDs do not collide with the
 # COVID-19 ↔ Card spending section. Uses base R, shiny and ggplot2 only.
 # Depends on `countries` (src/analysis.R) and the colours and
 # `chart_theme` defined in src/plots.R, so source it after both.
-
-# Fixed 2021 denominators: Korea's projected population and Taiwan's year-end
-# registered population. These national definitions differ; see README sources.
-covid_population <- c(Korea = 51744876, Taiwan = 23375314)
 
 covid_daily_measures <- c(cases = "New cases per million (7-day average)",
                           deaths = "New deaths per million (7-day average)")
@@ -33,43 +29,6 @@ covid_events <- data.frame(
   label = c("Taiwan Level 3 alert", "Korea gradual recovery",
             "Korea distancing lifted", "Taiwan quarantine ends")
 )
-
-# Mean of the current day and the previous `days - 1` calendar days.
-# Windows follow dates, not rows, so a missing day cannot stretch a window.
-trailing_mean <- function(x, dates, days = 7L) {
-  full <- seq(min(dates), max(dates), by = "day")
-  v <- x[match(full, dates)]
-  out <- vapply(seq_along(full), function(i) {
-    if (i < days) return(NA_real_)
-    w <- v[(i - days + 1L):i]
-    if (any(!is.finite(w))) NA_real_ else mean(w)
-  }, numeric(1))
-  out[match(dates, full)]
-}
-
-read_covid_daily <- function(path = "data") {
-  d <- read.csv(file.path(path, "covid_daily.csv"), fileEncoding = "UTF-8-BOM")
-  d$date <- as.Date(d$date)
-  stopifnot(!anyNA(d$date), !anyDuplicated(d[c("country_code", "date")]),
-            setequal(d$country_code, names(countries)))
-  d$country <- unname(countries[d$country_code])
-  d <- d[order(d$country, d$date), ]
-  population <- unname(covid_population[d$country])
-  # Retain reporting corrections, consistently with the monthly joint analysis.
-  per_million <- function(x) x / population * 1e6
-  d$cases_pm <- per_million(d$jhu_new_confirmed)
-  d$deaths_pm <- per_million(d$jhu_new_deaths)
-  d$stringency <- d$owid_stringency_index
-  d <- do.call(rbind, lapply(split(d, d$country), function(g) {
-    g$cases_7day <- trailing_mean(g$cases_pm, g$date)
-    g$deaths_7day <- trailing_mean(g$deaths_pm, g$date)
-    g
-  }))
-  rownames(d) <- NULL
-  d[c("country", "date", "jhu_new_confirmed", "jhu_new_deaths",
-      "cases_pm", "deaths_pm", "cases_7day", "deaths_7day", "stringency")]
-}
-
 
 # ---- Plot helpers ----------------------------------------------------------
 
@@ -208,8 +167,10 @@ covid_section_ui <- function(id) {
       selectInput(ns("view"), "View", covid_view_choices, selectize = FALSE),
       selectInput(ns("metric"), "COVID-19 measure (7-day average)", covid_measure_choices,
                   selectize = FALSE),
-      dateRangeInput(ns("dates"), "Dates", start = "2021-01-01", end = "2022-12-31",
-                     min = "2021-01-01", max = "2022-12-31", format = "d M yyyy")),
+      htmltools::tagAppendAttributes(
+        dateRangeInput(ns("dates"), "Dates", start = "2020-01-01", end = "2022-12-31",
+                       min = "2020-01-01", max = "2022-12-31"),
+        class = "covid-date-range")),
     tags$div(class = "filter-grid analysis-options",
       checkboxInput(ns("compressed"), "Compress large values (inverse hyperbolic sine scale)",
                     value = FALSE),
@@ -232,7 +193,7 @@ covid_section_ui <- function(id) {
     tags$details(class = "methods",
       tags$summary("Data and interpretation"),
       tags$p("Daily cases and deaths come from Johns Hopkins University CSSE. The Stringency Index comes from the Oxford COVID-19 Government Response Tracker via Our World in Data."),
-      tags$p("Rates use fixed 2021 population denominators (Korea 51.74 million projected residents, Taiwan 23.38 million year-end registered residents). These national population definitions differ. A 7-day average requires reports for the current and previous six calendar days; the first six days of 2021 have no average."),
+      tags$p("Rates use fixed 2021 population denominators for all three years (Korea 51.74 million projected residents, Taiwan 23.38 million year-end registered residents). These national population definitions differ. Johns Hopkins reports start on 22 January 2020, so cases and deaths are missing before 23 January 2020. A 7-day average requires reports for the current and previous six calendar days, so the first average is on 29 January 2020. The Stringency Index covers every day from 1 January 2020."),
       tags$p("Negative daily counts are reporting corrections and are retained, consistently with the COVID-19 ↔ Card spending monthly sums."),
       tags$p("The compressed scale uses the inverse hyperbolic sine. It shows small and large waves together and retains zeros and negative reporting corrections."),
       tags$p("Policy dates: Taiwan’s nationwide Level 3 alert (19 May 2021), Korea’s first gradual recovery phase (1 Nov 2021), the end of Korea’s social distancing rules (18 Apr 2022), and the end of Taiwan’s mandatory arrival quarantine (13 Oct 2022). They give context and do not imply cause."),
@@ -292,7 +253,11 @@ covid_section_server <- function(id, data) {
 
     output$download <- downloadHandler(
       filename = function() paste0("covid-daily-", input$dates[1], "-to-", input$dates[2], ".csv"),
-      content = function(file) write.csv(selected(), file, row.names = FALSE, na = "")
+      content = function(file) {
+        columns <- c("country", "date", "jhu_new_confirmed", "jhu_new_deaths",
+                     "cases_pm", "deaths_pm", "cases_7day", "deaths_7day", "stringency")
+        write.csv(selected()[columns], file, row.names = FALSE, na = "")
+      }
     )
   })
 }

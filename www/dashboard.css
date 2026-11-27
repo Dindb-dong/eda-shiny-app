@@ -48,14 +48,14 @@ body {
 }
 #section > li > a:hover { color: var(--ink); text-decoration: underline; }
 
-#tab {
+:is(#tab, #covid_views, #covid_timeline-view) {
   display: flex;
   flex-wrap: wrap;
   gap: 0 1.8rem;
   border-block-end: 1px solid var(--line);
   margin-block-end: 1.55rem;
 }
-#tab > li > a {
+:is(#tab, #covid_views, #covid_timeline-view) > li > a {
   margin: 0;
   padding: .65rem 0 .85rem;
   border: 0;
@@ -63,9 +63,10 @@ body {
   border-radius: 0;
   color: var(--quiet);
   background: transparent;
+  white-space: nowrap;
 }
-#tab > li.active > a { border-block-end-color: var(--ink); color: var(--ink); font-weight: 650; }
-#tab > li > a:hover { color: var(--ink); text-decoration: underline; }
+:is(#tab, #covid_views, #covid_timeline-view) > li.active > a { border-block-end-color: var(--ink); color: var(--ink); font-weight: 650; }
+:is(#tab, #covid_views, #covid_timeline-view) > li > a:hover { color: var(--ink); text-decoration: underline; }
 
 .filter-grid {
   display: grid;
@@ -86,6 +87,10 @@ body {
   box-shadow: none;
 }
 .filter-grid select:focus { border-color: var(--ink); box-shadow: none; }
+.industry-detail-button { min-block-size: 3.7rem; justify-self: start; }
+@media (min-width: 720px) {
+  .industry-detail-controls { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .filter-grid .input-daterange input {
   min-block-size: 3.7rem;
   padding-inline: .4rem;
@@ -99,6 +104,36 @@ body {
   background: transparent;
   border-color: var(--control);
   color: var(--quiet);
+}
+
+.covid-filters { align-items: start; }
+.covid-date-range { container: covid-dates / inline-size; }
+.covid-date-range .input-daterange {
+  display: grid;
+  gap: .4rem;
+  inline-size: 100%;
+}
+.covid-date-range .input-daterange > .form-control {
+  min-inline-size: 0;
+  margin: 0;
+  padding-inline: .8rem;
+}
+.covid-date-range .input-daterange .input-group-addon {
+  padding: 0;
+  border: 0;
+  inline-size: auto;
+}
+@container covid-dates (inline-size >= 22rem) {
+  .covid-date-range .input-daterange {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+  }
+}
+@media (pointer: coarse) {
+  .covid-date-range .input-daterange > .form-control {
+    min-block-size: 48px;
+    font-size: 16px;
+  }
 }
 
 .filter-grid .shiny-input-container > div:has(> select) { position: relative; }
@@ -135,6 +170,13 @@ body {
 .table-scroll th { text-align: start; }
 .methods { border-block-start: 1px solid var(--line); padding-block: 1.25rem; color: var(--quiet); }
 .methods summary { color: var(--ink); cursor: pointer; font-weight: 650; margin-block-end: .8rem; }
+.findings-question { font-family: Georgia, "Times New Roman", serif; font-size: 2rem; line-height: 1.35; margin-block: 0 .8rem; text-wrap: balance; }
+.finding h2 { font-size: 2.1rem; text-wrap: balance; }
+.finding figure { margin: 0; }
+.finding figcaption, .finding > p { text-wrap: pretty; }
+.finding figcaption { margin-block: .6rem 0; }
+.finding-data { border-block-start: 0; padding-block: .6rem 0; }
+#findings_download { color: var(--ink); text-decoration: underline; }
 .dashboard :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
 @media (min-width: 1120px) {
@@ -145,7 +187,8 @@ body {
 @media (max-width: 550px) {
   .dashboard { padding-inline: .6rem; }
   .filter-grid { grid-template-columns: minmax(0, 1fr); }
-  #tab { gap: 0 1.2rem; }
-  #tab > li > a { font-size: 1.2rem; }
+  :is(#tab, #covid_views, #covid_timeline-view) { gap: 0 1.2rem; }
+  :is(#tab, #covid_views, #covid_timeline-view) > li > a { font-size: 1.2rem; }
   .analysis-section h2 { font-size: 2.3rem; }
+  .finding h2 { font-size: 1.9rem; }
 }

@@ -1,0 +1,5 @@
+country,capital_area,population,reference,units
+Korea,capital,26023283,resident registration December 2021,"Seoul 9,509,458; Incheon 2,948,375; Gyeonggi 13,565,450"
+Korea,non_capital,25615526,resident registration December 2021,"14 other provinces; national total 51,638,809 minus capital"
+Taiwan,capital,6896483,household registration December 2021,"Taipei 2,524,393; New Taipei 4,008,113; Keelung 363,977"
+Taiwan,non_capital,16337292,household registration December 2021,"18 other cities and counties excluding Kinmen (141,539), whose cases have no county in the case source; national total 23,375,314"

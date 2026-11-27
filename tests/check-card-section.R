@@ -5,7 +5,7 @@ source("app.R")
 stopifnot(card_comparison$start == as.Date("2014-01-01"),
           card_comparison$end == as.Date("2023-08-01"),
           nrow(card_comparison$data) == 116L * 22L,
-          nrow(spending) == 1296L)
+          nrow(subset(spending, category %in% c("food", "apparel"))) == 1296L)
 raw <- card_comparison$data
 all_categories <- names(card_category_labels)
 total <- card_aggregate(raw)
@@ -61,7 +61,7 @@ stopifnot(isTRUE(all.equal(tw_ec$amount_local - tw_ec_drop$amount_local,
 # Check namespaced server outputs, unit/series combinations,
 # selected date ranges, categories and the data downloaded by the displayed view.
 testServer(card_section_server, args = list(data = card_comparison), {
-  session$setInputs(country = "both", scope = "total", unit = "real_index", series = "raw",
+  session$setInputs(view = "trend", country = "both", scope = "total", total_type = "all", unit = "real_index", series = "raw",
     dates = as.Date(c("2014-01-01", "2023-08-01")), categories = c("FD", "TR", "EC"),
     drop_other = FALSE, free_y = FALSE, shade = TRUE,
     covid_range = as.Date(c("2020-01-01", "2022-12-01")), restrictions = FALSE)
@@ -93,5 +93,29 @@ testServer(card_section_server, args = list(data = card_comparison), {
   stopifnot(nrow(selected()) == 12L, all(selected()$country == "Taiwan"),
     min(selected()$date) == as.Date("2020-01-01"))
   assert_chart()
+
+  # Offline-only total drops e-commerce; LOESS draws a trend without changing the series.
+  session$setInputs(country = "both", scope = "total", total_type = "offline", drop_other = FALSE,
+    dates = as.Date(c("2014-01-01", "2023-08-01")), unit = "real_index", series = "raw", loess = TRUE, span = 0.5)
+  offline <- card_aggregate(raw, "total", offline_only = TRUE)
+  stopifnot(all(selected()$panel == "Offline spending"), nrow(trend()) == 232L,
+    isTRUE(all.equal(offline$amount_local, card_aggregate(raw, "total")$amount_local -
+      card_aggregate(raw, "category", "EC")$amount_local)))
+  assert_chart()
+
+  # Annual shares sum to 100% per country-year; the partial 2023 is left out by default.
+  session$setInputs(view = "share_bar", bar_split = "cats", include_partial = FALSE, shade = TRUE)
+  sums <- tapply(shares()$share, interaction(shares()$country, shares()$year), sum)
+  stopifnot(all(abs(sums - 100) < 1e-9), max(shares()$year) == 2022L, reclass(),
+    all(abs(shares()$ymax[shares()$category == "OT"] - 100) < 1e-9))
+  assert_chart()
+  session$setInputs(include_partial = TRUE, bar_split = "channel")
+  stopifnot(max(shares()$year) == 2023L, setequal(shares()$category, c("EC", "OFF")))
+  assert_chart()
+  session$setInputs(view = "share_line", categories = c("FD", "EC"), free_y = TRUE)
+  stopifnot(setequal(shares()$category, c("FD", "EC")), grepl("Change (pp)", output$summary, fixed = TRUE))
+  assert_chart()
+  downloaded <- read.csv(output$download)
+  stopifnot(nrow(downloaded) == nrow(shares()), isTRUE(all.equal(downloaded$share, shares()$share)))
 })
-cat("Card comparison: source totals, normalization, inflation, calendar lags, Other exclusion, chart options and CSV verified.\n")
+cat("Card comparison: source totals, normalization, inflation, calendar lags, Other exclusion, chart options, offline total, LOESS, annual shares and CSV verified.\n")

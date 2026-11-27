@@ -1,6 +1,5 @@
 countries <- c(KOR = "Korea", TWN = "Taiwan")
 areas <- c(national = "Nationwide", capital = "Capital area", non_capital = "Non-capital area")
-categories <- c(food = "Food and dining", apparel = "Apparel and accessories")
 spending_measures <- c(yoy = "Year-over-year growth (%)",
                        index = "Spending index (2019 mean = 100)",
                        seasonal = "12-month log difference (×100)",
@@ -8,11 +7,23 @@ spending_measures <- c(yoy = "Year-over-year growth (%)",
                        monthly = "Month-over-month growth (%)",
                        double_diff = "First and seasonal log difference (×100)")
 covid_measures <- c(cases = "Reported cases", deaths = "Reported deaths",
-                    stringency = "Restriction stringency (0–100)")
+                    stringency = "Restriction stringency (0–100)",
+                    level = "Korea distancing level (by area)")
+# Measures plotted on their own scale; counts use asinh(count / 100).
+level_measures <- c("stringency", "level")
 onset <- as.Date("2020-01-01")
 month_id <- function(date) as.integer(format(date, "%Y")) * 12L + as.integer(format(date, "%m"))
 
-read_spending <- function(path = "data") {
+read_industry_crosswalk <- function(path = "data") {
+  d <- read.csv(file.path(path, "industry_crosswalk.csv"), fileEncoding = "UTF-8-BOM",
+                colClasses = "character")
+  d <- subset(d, status != "alternative_not_additive")
+  stopifnot(!anyDuplicated(d$category), !anyDuplicated(d$taiwan_code),
+            all(nzchar(d$label_en)), all(nzchar(d$korea_codes)))
+  d
+}
+
+read_spending <- function(path = "data", industry = read_industry_crosswalk(path)) {
   read <- function(file) read.csv(file.path(path, file), fileEncoding = "UTF-8-BOM")
   before <- read("card_spending_by_capital_area_pre_covid_2014_2019.csv")
   since <- read("card_spending_by_capital_area_since_covid_onset_2020_2022.csv")
@@ -20,15 +31,28 @@ read_spending <- function(path = "data") {
   keys <- c("country", "month", "category", "capital_area")
   stopifnot(!anyDuplicated(spending[keys]),
             setequal(spending$country, unname(countries)),
-            setequal(spending$category, names(categories)),
+            setequal(spending$category, industry$category),
             setequal(spending$capital_area, c(names(areas)[-1], "unallocated")),
             all(is.finite(spending$amount_local) & spending$amount_local >= 0),
             all((spending$month < 202001) == (spending$covid_period == "pre_covid")),
             all(before$covid_period == "pre_covid"), all(since$covid_period == "since_covid_onset"))
   total_keys <- c("country", "month", "category", "currency")
   totals <- aggregate(spending["amount_local"], spending[total_keys], sum)
+  source_columns <- c("country", "month", "source_category", "currency", "amount_local")
+  national_source <- rbind(read("korea_national_2019_2022.csv")[source_columns],
+                           read("taiwan_national_2019_2022.csv")[source_columns])
+  korea_codes <- strsplit(industry$korea_codes, "+", fixed = TRUE)
+  source_map <- rbind(
+    data.frame(country = "Korea", category = rep(industry$category, lengths(korea_codes)),
+               source_category = unlist(korea_codes)),
+    data.frame(country = "Taiwan", category = industry$category,
+               source_category = industry$taiwan_code))
+  since_source <- merge(source_map, subset(national_source, month >= 202001),
+                        by = c("country", "source_category"))
+  stopifnot(!anyDuplicated(since_source[c("country", "category", "source_category", "month")]),
+            nrow(since_source) == 36L * nrow(source_map))
   national <- rbind(read("card_spending_pre_covid_2014_2019.csv")[c(total_keys, "amount_local")],
-                    subset(read("common_panel.csv"), month >= 202001)[c(total_keys, "amount_local")])
+                    aggregate(since_source["amount_local"], since_source[total_keys], sum))
   checked <- merge(totals, national, by = total_keys)
   stopifnot(!anyDuplicated(national[total_keys]), nrow(checked) == nrow(totals),
             nrow(checked) == nrow(national), all(checked$amount_local.x == checked$amount_local.y))
@@ -43,43 +67,67 @@ read_spending <- function(path = "data") {
   d$panel <- paste(d$country, d$region, sep = " · ")
 
   by_series(d, function(g) {
+    stopifnot(all(g$amount_local > 0))
+    add_measures(g)
+  }, keys = c("country", "category", "capital_area"))
+}
+
+# Spending measures for one monthly series (Jan 2014 – Dec 2022), shared by the
+# area series and the Taiwan city/county series so both get the same mask.
+add_measures <- function(g) {
     stopifnot(identical(g$date, seq(as.Date("2014-01-01"), as.Date("2022-12-01"), by = "month")),
-              all(g$amount_local > 0),
               length(unique(g$currency)) == 1L)
-    amount <- g$amount_local
+    # Small units can have zero or net-negative (refund) months; no ratio is defined there.
+    amount <- ifelse(g$amount_local > 0, g$amount_local, NA_real_)
     year_ago <- amount[match(g$month_id - 12L, g$month_id)]
     last_month <- amount[match(g$month_id - 1L, g$month_id)]
     pre <- subset(g, date < onset)
-    median_by_month <- tapply(pre$amount_local, pre$season, median)
-    g$index <- 100 * amount / mean(amount[g$month %/% 100 == 2019])
+    median_by_month <- tapply(amount[g$date < onset], pre$season, median, na.rm = TRUE)
+    g$index <- 100 * amount / mean(amount[g$month %/% 100 == 2019], na.rm = TRUE)
     g$yoy <- 100 * (amount / year_ago - 1)
     g$seasonal <- 100 * (log(amount) - log(year_ago))
     g$monthly <- 100 * (amount / last_month - 1)
     g$double_diff <- g$seasonal - g$seasonal[match(g$month_id - 1L, g$month_id)]
     g$gap <- 100 * (amount / unname(median_by_month[as.character(g$season)]) - 1)
+    if (g$country[1] == "Taiwan") {
+      # NCCC's category mix shifts abruptly in February 2021 (food falls by half and
+      # general retail jumps in the same month, in every city and county). The source
+      # gives no notice of a change, but the pattern matches a merchant-to-industry
+      # mapping change, so change measures whose endpoints straddle that month are
+      # masked in every category; level measures cannot be repaired.
+      straddles <- g$month >= 202102 & g$month <= 202201
+      g$yoy[straddles] <- NA
+      g$seasonal[straddles] <- NA
+      g$monthly[g$month == 202102] <- NA
+      g$double_diff <- g$seasonal - g$seasonal[match(g$month_id - 1L, g$month_id)]
+    }
+    # A zero month in a small unit gives an infinite or undefined change; leave it missing.
+    for (measure in c("index", "yoy", "seasonal", "monthly", "double_diff", "gap")) {
+      g[[measure]][!is.finite(g[[measure]])] <- NA
+    }
     g
-  }, keys = c("country", "category", "capital_area"))
 }
 
-read_covid <- function(path = "data") {
-  d <- read.csv(file.path(path, "covid_daily.csv"), fileEncoding = "UTF-8-BOM")
-  d$date <- as.Date(d$date)
-  stopifnot(!anyNA(d$date), !anyDuplicated(d[c("country_code", "date")]),
-            setequal(d$country_code, names(countries)))
-  d$country <- unname(countries[d$country_code])
-  d$month_id <- month_id(d$date)
-  d <- lapply(split(d, list(d$country, d$month_id), drop = TRUE), function(g) {
-    first <- as.Date(format(g$date[1], "%Y-%m-01"))
-    expected <- as.integer(seq(first, by = "month", length.out = 2)[2] - first)
-    daily <- function(x, statistic) {
-      if (length(x) != expected || any(!is.finite(x))) return(NA_real_)
-      statistic(x)
-    }
-    data.frame(country = g$country[1], month_id = g$month_id[1], covid_date = first,
-               cases = daily(g$jhu_new_confirmed, sum), deaths = daily(g$jhu_new_deaths, sum),
-               stringency = daily(g$owid_stringency_index, mean))
-  })
-  do.call(rbind, d)
+industry_months <- function(spending, selected_countries, period, view) {
+  d <- spending[spending$country %in% selected_countries &
+                  spending$capital_area %in% c("capital", "non_capital") &
+                  spending$month >= 201501, ]
+  if (period != "all") d <- d[d$covid_period == period, ]
+  keys <- c("country", "category", "month", "date")
+  if (view == "industry_growth") {
+    d <- d[c(keys, "capital_area", "panel", "yoy")]
+    names(d)[names(d) == "yoy"] <- "value"
+    return(d)
+  }
+
+  capital <- d[d$capital_area == "capital", c(keys, "yoy")]
+  non_capital <- d[d$capital_area == "non_capital", c(keys, "yoy")]
+  names(capital)[names(capital) == "yoy"] <- "capital_yoy_pct"
+  names(non_capital)[names(non_capital) == "yoy"] <- "non_capital_yoy_pct"
+  matched <- merge(capital, non_capital, by = keys, all = TRUE)
+  matched$panel <- matched$country
+  matched$value <- matched$capital_yoy_pct - matched$non_capital_yoy_pct
+  matched
 }
 
 by_series <- function(data, fn, keys = "panel") {
@@ -87,14 +135,15 @@ by_series <- function(data, fn, keys = "panel") {
   do.call(rbind, lapply(groups, function(g) fn(g[order(g$date), , drop = FALSE])))
 }
 
-pair_months <- function(spending, covid, metric, lead = 0L, omit_feb = FALSE) {
+pair_months <- function(spending, covid, metric, lead = 0L) {
   spending$covid_month_id <- spending$month_id - lead
+  # Area-level COVID-19 rows pair with the matching spending area.
+  keys <- intersect("capital_area", names(covid))
   paired <- merge(spending, covid,
-                  by.x = c("country", "covid_month_id"), by.y = c("country", "month_id"))
-  if (omit_feb) paired <- subset(paired, country != "Taiwan" | month != 202102)
+                  by.x = c("country", keys, "covid_month_id"), by.y = c("country", keys, "month_id"))
   paired$x <- paired[[metric]]
   # asinh retains zero and negative reporting corrections.
-  if (metric != "stringency") paired$x <- asinh(paired$x / 100)
+  if (!metric %in% level_measures) paired$x <- asinh(paired$x / 100)
   paired <- subset(paired, is.finite(x) & is.finite(value))
   paired[order(paired$panel, paired$date), , drop = FALSE]
 }
@@ -105,7 +154,7 @@ safe_correlation <- function(x, y, method = "spearman") {
 }
 
 adjust_association <- function(g) {
-  # One annual harmonic and a linear trend leave degrees of freedom in a 24-month window.
+  # One annual harmonic and a linear trend leave degrees of freedom in a 24–36 month window.
   g$sin_month <- sin(2 * pi * g$season / 12)
   g$cos_month <- cos(2 * pi * g$season / 12)
   g$x_adjusted <- residuals(lm(x ~ month_id + sin_month + cos_month, data = g))
@@ -140,7 +189,12 @@ forecast_index <- function(g, cutoff) {
   log_spending <- ts(log(g$amount_local[train]), frequency = 12)
   horizon <- nrow(testing)
   seasonal_naive <- rep(tail(log_spending, 12), length.out = horizon)
-  smooth <- HoltWinters(log_spending, seasonal = "additive")
+  smooth <- tryCatch(
+    HoltWinters(log_spending, seasonal = "additive"),
+    # The default starting values fail for Taiwan's capital-area retail series.
+    error = function(e) HoltWinters(log_spending, seasonal = "additive",
+                                    optim.start = c(alpha = .4, beta = .2, gamma = .2))
+  )
   sarima <- arima(log_spending, order = c(0, 1, 1), seasonal = list(order = c(0, 1, 1), period = 12))
   if (sarima$code != 0L) stop("Seasonal ARIMA failed to converge for ", g$panel[1])
   forecasts <- list("Seasonal naïve" = seasonal_naive,
@@ -230,14 +284,14 @@ boxcox_profile <- function(g) {
   data.frame(panel = g$panel[1], lambda = lambda, likelihood = log_likelihood - max(log_likelihood))
 }
 
-read_age_profile <- function(path = "data") {
+read_age_profile <- function(path = "data", industry = read_industry_crosswalk(path)) {
   d <- read.csv(file.path(path, "taiwan_demographics_2019_2022.csv"), fileEncoding = "UTF-8-BOM")
-  d <- subset(d, dimension == "age" & source_category %in% c("FD", "CT") & is.finite(age_midpoint))
+  d <- subset(d, dimension == "age" & source_category %in% industry$taiwan_code & is.finite(age_midpoint))
   stopifnot(!anyDuplicated(d[c("month", "age_midpoint", "source_category")]),
             all(d$transactions > 0 & d$mean_ticket_local > 0),
             all(abs(d$mean_ticket_local - d$amount_local / d$transactions) < 1e-6))
   data.frame(date = as.Date(paste0(d$month, "01"), "%Y%m%d"),
-             category = ifelse(d$source_category == "FD", "food", "apparel"),
+             category = industry$category[match(d$source_category, industry$taiwan_code)],
              age = d$age_midpoint, age_band = d$age_band, transactions = d$transactions,
              observed = d$mean_ticket_local)
 }
@@ -252,4 +306,80 @@ smooth_age_profile <- function(d) {
   d$robust <- exp(predict(robust, newdata = d))
   d$residual <- 100 * log(d$observed / d$robust)
   d
+}
+
+# Natural Earth admin-1 units tagged with the two card-spending zones (README.md).
+# Matsu (Lienchiang County, non-capital) is absent from Natural Earth, so Taiwan has
+# 21 drawn units although its spending totals include all 22.
+read_region_boundaries <- function(path = "data") {
+  d <- read.csv(file.path(path, "region_boundaries.csv"), fileEncoding = "UTF-8-BOM")
+  units <- unique(d[c("country", "unit_code", "zone")])
+  capital <- list(Korea = c("KR-11", "KR-28", "KR-41"), Taiwan = c("TW-TPE", "TW-TPQ", "TW-KEE"))
+  stopifnot(!anyDuplicated(units$unit_code), sum(units$country == "Korea") == 17L,
+            sum(units$country == "Taiwan") == 21L, !"TW-LIE" %in% units$unit_code,
+            all(vapply(names(capital), function(k) setequal(units$unit_code[units$country == k & units$zone == "capital"],
+                                                            capital[[k]]), logical(1))),
+            all(units$zone %in% c("capital", "non_capital")), all(is.finite(d$lon) & is.finite(d$lat)))
+  d[order(d$piece, d$order), ]
+}
+
+# Taiwan's 22 cities and counties (NCCC C02) and Korea's 16 provinces plus "other"
+# (ECOS 601Y002 website export); see README.md. Taiwan's units reproduce the national,
+# capital and non-capital series exactly. Korea's file also carries ECOS's published
+# national total, which matches exactly, as do the capital provinces and "other"
+# (the existing unallocated series); ECOS's province figures do not add exactly to its
+# national total (up to 378 million won, 0.05%), so non-capital is checked within 0.1%.
+capital_units <- c("TW-TPE", "TW-TPQ", "TW-KEE", "KR-11", "KR-28", "KR-41")
+read_unit_spending <- function(spending, path = "data", industry = read_industry_crosswalk(path)) {
+  read <- function(file) read.csv(file.path(path, file), fileEncoding = "UTF-8-BOM")
+  d <- rbind(read("card_spending_by_city_county_taiwan_2014_2022.csv"),
+             read("card_spending_by_province_korea_2014_2022.csv"))
+  units <- tapply(d$unit_code, d$country, function(x) length(unique(x)))
+  stopifnot(!anyDuplicated(d[c("country", "month", "category", "unit_code")]),
+            units[["Taiwan"]] == 22L, units[["Korea"]] == 18L, !"KR-50" %in% d$unit_code,
+            setequal(d$category, industry$category), all(table(d$unit_code, d$category) == 108L),
+            all(is.finite(d$amount_local)),
+            all(d$currency == ifelse(d$country == "Taiwan", "TWD", "KRW")))
+  d$capital_area <- ifelse(d$unit_code %in% capital_units, "capital",
+                           ifelse(d$unit_code == "other", "unallocated", "non_capital"))
+  d$capital_area[d$unit_code == "national"] <- "national"
+  compare <- function(country, rows, zone) {
+    total <- aggregate(amount_local ~ month + category, rows, sum)
+    series <- if (zone == "unallocated") {
+      z <- function(a) spending[spending$country == country & spending$capital_area == a, c("month", "category", "amount_local")]
+      m <- merge(merge(z("national"), z("capital"), by = c("month", "category")), z("non_capital"), by = c("month", "category"))
+      data.frame(m[c("month", "category")], amount_local = m$amount_local.x - m$amount_local.y - m$amount_local)
+    } else spending[spending$country == country & spending$capital_area == zone, c("month", "category", "amount_local")]
+    matched <- merge(total, series, by = c("month", "category"))
+    stopifnot(nrow(matched) == 108L * 7L)
+    matched$amount_local.x / matched$amount_local.y - 1
+  }
+  taiwan <- d[d$country == "Taiwan", ]
+  korea <- d[d$country == "Korea", ]
+  stopifnot(all(compare("Taiwan", taiwan, "national") == 0),
+            all(compare("Taiwan", taiwan[taiwan$capital_area == "capital", ], "capital") == 0),
+            all(compare("Taiwan", taiwan[taiwan$capital_area == "non_capital", ], "non_capital") == 0),
+            all(compare("Korea", korea[korea$capital_area == "national", ], "national") == 0),
+            all(compare("Korea", korea[korea$capital_area == "capital", ], "capital") == 0),
+            all(compare("Korea", korea[korea$capital_area == "unallocated", ], "unallocated") == 0),
+            all(abs(compare("Korea", korea[korea$capital_area == "non_capital", ], "non_capital")) < .001))
+  d <- d[d$unit_code != "national", ]
+  d$date <- as.Date(paste0(d$month, "01"), "%Y%m%d")
+  d$month_id <- month_id(d$date)
+  d$season <- as.integer(format(d$date, "%m"))
+  by_series(d, add_measures, keys = c("country", "category", "unit_code"))
+}
+
+# One row per country and zone: year-over-year growth for the chosen industry and month,
+# with that month's zone cases per million, Korea's zone distancing level and national stringency.
+zone_values <- function(spending, covid_area, selected_countries, category, month) {
+  d <- spending[spending$country %in% selected_countries & spending$category == category &
+                  spending$month == month & spending$capital_area %in% c("capital", "non_capital"),
+                c("country", "category", "month", "capital_area", "region", "yoy")]
+  context <- covid_area[covid_area$month_id == month_id(as.Date(paste0(month, "01"), "%Y%m%d")), ]
+  at <- match(paste(d$country, d$capital_area), paste(context$country, context$capital_area))
+  d$stringency <- context$stringency[at]
+  d$cases_per_million <- context$cases_per_million[at]
+  d$level <- context$level[at]
+  d[order(d$country, d$capital_area), ]
 }
