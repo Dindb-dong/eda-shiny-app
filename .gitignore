@@ -4,3 +4,6 @@
 .Ruserdata
 rsconnect/
 .DS_Store
+
+# Contributor attachments are integrated into src/ and data/, not committed as archives
+*.zip
